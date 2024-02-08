@@ -8,6 +8,7 @@ int isInit = 0; // 0 for false, 1 for true
 char *LanIp ; 
 mcast_t *AppM;
 mcast_t *ServiceM;
+LocalRegistry *LocalR;
 void *AppListenThread() {
     // in App
     while(1) {
@@ -54,7 +55,7 @@ int zcs_init(int type , char *MulticastConfig){
     ServiceM = multicast_init(LanIp, SERVICERPORT, SERVICESPORT);
     if (type == ZCS_APP_TYPE)
     {
-        LocalRegistry *registry = malloc(sizeof(LocalRegistry));
+        LocalR = malloc(MAX_SERVICES*sizeof(LocalRegistry));
         isInit = 1;
 
         
