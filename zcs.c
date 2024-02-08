@@ -59,6 +59,42 @@ int goUp(char *name){
     return 1;
 }
 
+
+char* HeartBeatGenerate(char* ServiceName) {
+    char *HBMsg = (char *)malloc(2048);
+    strcat(HBMsg, "HB#");
+    strcat(HBMsg,ServiceName);
+    return HBMsg;
+    
+}
+
+char* NotificationGenerate(char *ServiceName, zcs_attribute_t attr[], int num) {
+    //"NOT#name#attname,attval;..."
+    char *NotMsg = (char *)malloc(2048);
+    strcat(NotMsg, "NOT#");
+    strcat(NotMsg,ServiceName);
+    strcat(NotMsg,"#");
+    for (int i = 0; i < num; i++)
+    {
+        char* Pair = (char *)malloc(70);
+        strcat(Pair,attr[i].attr_name);
+        strcat(Pair,",");
+        strcat(Pair,attr[i].value);
+        strcat(Pair,";");
+        strcat(NotMsg,Pair);
+        free(Pair)
+    }
+    
+    str[strlen(NotMsg); - 1] = '\0';
+    return NotMsg;
+    
+}
+
+void SendMsg(mcast_t Destination, char* msg) {
+    multicast_send(Destination, msg, strlen(msg));
+    return ;
+}
+
 void *AppListenThread() {
     // in App
     while(1) {
