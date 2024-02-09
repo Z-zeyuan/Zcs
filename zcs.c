@@ -209,8 +209,13 @@ void *AppListenThread() {
         //receive
         char msg [MAX_MSG_Size];
         multicast_setup_recv(ServiceM);
-        if (multicast_check_receive(ServiceM) == 0) {   // Check if there's new msg
-	    //multicast_send(ServiceM, msg, strlen(msg));
+        while (multicast_check_receive(ServiceM) == 0) {   // Check if there's new msg
+            // Spin
+            if (difftime(time(NULL), start_time) >= TIMEOUT){
+            updateThreadTable(thread_table);
+            restart_time = 1;
+            }   
+        }
         multicast_receive(ServiceM,msg,MAX_MSG_Size)
         
         int msgtype = messageType(msg);
@@ -235,7 +240,6 @@ void *AppListenThread() {
         default:
             break;
         }
-        }
         if (difftime(time(NULL), start_time) >= TIMEOUT){
             updateThreadTable(thread_table);
             restart_time = 1;
@@ -244,6 +248,21 @@ void *AppListenThread() {
     return ;
 }
 
+void *ServiceListenThread(){
+    while(1){
+        char* msg = (char *) malloc(MAX_MSG_Size);
+        multicast_setup_recv(AppM);
+        while (multicast_check_receive(ServiceM) == 0) {
+            // Spin
+            if (difftime(time(NULL), start_time) >= TIMEOUT){
+            updateThreadTable(thread_table);
+            restart_time = 1;
+        }
+        }
+        multicast_receive(AppM,msg,MAX_MSG_Size)
+
+    }
+}
 
 
 void *HBSenderThread() {
