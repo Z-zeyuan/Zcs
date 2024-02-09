@@ -9,7 +9,7 @@
 int isInit = 0; // 0 for false, 1 for true
 char *LanIp ; 
 int Nodetype;
-char * NodeName = (char *)malloc(64);
+LocalRegistry *thisNode;
 
 
 mcast_t *AppM;
@@ -309,9 +309,36 @@ int zcs_init(int type , char *MulticastConfig){
     return 0;
 };
 
+LocalRegistry *initializeNode(const char *name, const zcs_attribute_t attr[], int num) {
+    // Allocate memory for Node
+    LocalRegistry *newNode = (LocalRegistry *)malloc(sizeof(LocalRegistry));
+    if (newNode == NULL) {
+        // Error handling for memory allocation failure
+        fprintf(stderr, "Memory allocation failed for LocalRegistry\n");
+        return NULL;
+    }
+
+    // Copy serviceName
+    strncpy(newNode->serviceName, name, MAX_NODE_NAME_SIZE - 1);
+    newNode->serviceName[MAX_NODE_NAME_SIZE - 1] = '\0';
+
+    newNode->attr_num = num;
+
+    newNode->isAliveTimeCount = 0;
+    newNode->isAlive = 0;
+
+    // Copy AttributeList
+    for (int i = 0; i < num; i++) {
+        newNode->AttributeList[i].attr_name = strdup(attr[i].attr_name);
+        newNode->AttributeList[i].value = strdup(attr[i].value);
+    }
+
+    return newNode;
+}
+
 int zcs_start(char *name, zcs_attribute_t attr[], int num){
     if(isInit == 0){return -1;}
-    NodeName = name;
+    thisNode = initializeNode(name,attr,num);
     if(Nodetype == ZCS_APP_TYPE){      // APP
         pthread_create(&ListenerThread, NULL, AppListenThread, NULL); 
         DiscoveryGenerate();
@@ -319,6 +346,7 @@ int zcs_start(char *name, zcs_attribute_t attr[], int num){
         pthread_create(&ListenerThread, NULL, ServiceListenThread, NULL); 
         pthread_create(&HeartBeatGenerateThread, NULL, HBSenderThread,NULL);
     }
+    
     return 0;
     
 }
