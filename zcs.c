@@ -21,15 +21,19 @@ pthread_t newThread;
 int AddNode(LocalRegistry r){
     pthread_mutex_lock(&mutex);
     for (int i = 0; i < MAX_SERVICES; i++){
-        if (LocalR[i] == NULL){     
-            LocalR[i] = r;
+        if (LocalR != NULL && strcmp(LocalR[i].serviceName,r.serviceName) == 0){
             pthread_mutex_unlock(&mutex);
-            return 0;   // Success
+            return -1;           // Duplicate node name, reject
+        }else if (LocalR == NULL){
+            LocalR[i] == r;
+            pthread_mutex_unlock(&mutex);
+            return 0;           // Success
         }
     }
     pthread_mutex_unlock(&mutex);
-    return -1;          // FULL
+    return -1;                  // FULL
 }
+
 
 /*  Switch Node State to DOWN */
 int goDown(char *name){
@@ -221,31 +225,34 @@ int zcs_init(int type , char *MulticastConfig){
 
 int zcs_start(char *name, zcs_attribute_t attr[], int num){
 
+    
     if(Nodetype == 1){      // APP
         DiscoveryGenerate();
         pthread_create(&newThread, NULL, AppListenThread, NULL); 
     }else{                  // Service
         pthread_create(&newThread, NULL, ServiceListenThread, NULL); 
     }
+    pthread_create(&heartbeatThread, NULL, HeartBeatGenerate,NULL);
 }
+
 
 int zcs_post_ad(char *ad_name, char *ad_value){
     //post ad name and val 
 };
 
 int zcs_query(char *attr_name, char *attr_value, char *node_names[]){
-    pthread_mutex_lock(&mutex);
+    int count = 0;
     for (int i = 0; i < MAX_SERVICES; i++){
         if (LocalR[i] != NULL ){
             for (int j = 0; j < MAX_SERVICE_ATTRIBUTE; j++){
                 if (strcmp(attr_name,LocalR[i].AttributeList[j].attr_name) == 0 && 
                     strcmp(attr_value, LocalR[i].AttributeList[j].value) == 0){
-                        
+                        node_names[count++] = LocalR[i].serviceName;
                     }
             }
-
         }
     }
+    return 0;
 
 };
 
@@ -271,4 +278,18 @@ int zcs_listen_ad(char *name, zcs_cb_f cback){};
 
 int zcs_shutdown(){};
 
-void zcs_log(){};
+void zcs_log(){
+    printf("====== Log ======\n");
+    for (int i = 0; i < MAX_SERVICES; i++){
+        if (LocalR[i] != NULL){
+            printf("Name: %s, State: %s, Attributes: ",LocalR[i].serviceName, LocalR[i].isAlive);
+            for (int j = 0; j < MAX_SERVICE_ATTRIBUTE; j++){        // print all attributes of current node
+                if (LocalR[i].AttributeList[j] == NULL){
+                    printf("\n");
+                    break;
+                }
+                printf("(%s,%s), ",LocalR[i].AttributeList[j].attr_name,LocalR[i].AttributeList[j].value);
+            }
+        }
+    }
+};
