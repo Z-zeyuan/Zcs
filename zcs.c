@@ -223,7 +223,7 @@ int zcs_init(int type , char *MulticastConfig){
         //Add beater and listenner
     }
     else{
-        
+        return 0;
     }
     return -1;
     
@@ -232,7 +232,7 @@ int zcs_init(int type , char *MulticastConfig){
 int zcs_start(char *name, zcs_attribute_t attr[], int num){
 
     
-    if(Nodetype == 1){      // APP
+    if(Nodetype == ZCS_APP_TYPE){      // APP
         DiscoveryGenerate();
         pthread_create(&newThread, NULL, AppListenThread, NULL); 
     }else{                  // Service
