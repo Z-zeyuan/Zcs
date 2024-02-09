@@ -112,8 +112,12 @@ LocalRegistry NotificationDecode(char *NotMsg) {
     //"name#attname,attval;..."
     LocalRegistry Newnode = malloc(sizeof(LocalRegistry));
     //char name[64];
-    char* buffer = strtok(NotMsg, "#");
+    char* buffer = (char *)malloc(100);
+    buffer = strtok(NotMsg, "#");
     strcpy(Newnode.serviceName,buffer);
+    buffer = strtok(NotMsg, "#");
+    int num = atoi(buffer);
+    Newnode.attr_num = num;
     Newnode.isAlive=1;
     //add node
     char* buffer = strtok(NotMsg, ";");
@@ -123,12 +127,11 @@ LocalRegistry NotificationDecode(char *NotMsg) {
         
         char* attrname = (char *)malloc(40);
         char* attrval = (char *)malloc(30);
-        at_name = strtok(buffer, ",");
         strcpy(attrname,strtok(buffer, ","));
         strcpy(attrval,buffer);
         
         
-        free(Pair)
+        
     }
     
     str[strlen(NotMsg); - 1] = '\0';
