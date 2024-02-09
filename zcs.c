@@ -157,9 +157,7 @@ LocalRegistry NotificationDecode(char *NotMsg) {
     
 }
 
-char* HeartBeatDecode(char *msg){
 
-}
 
 int messageType(char *msg){
 
@@ -249,29 +247,12 @@ void *AppListenThread() {
 
 
 void *HBSenderThread() {
-    time_t start_time;
-    int restart_time = 1;
     // in App
     while(1) {
-        if (restart_time == 1){
-            restart_time = 0;
-            start_time = time(NULL);
-        }
-        //receive
-        char* msg = HeartBeatGenerate();
-        multicast_setup_recv(ServiceM);
-        if (multicast_check_receive(ServiceM) == 0) {   // Check if there's new msg
-	    //multicast_send(ServiceM, msg, strlen(msg));
-        multicast_receive(ServiceM,msg,MAX_MSG_Size)
-        
-        
-        }
-        if (difftime(time(NULL), start_time) >= TIMEOUT){
-            updateThreadTable(thread_table);
-            restart_time = 1;
-        }
+        sleep(0.01);
+        char* HBmsg = HeartBeatGenerate(NodeName);
+        SendMsg(AppM,HBmsg);
     }
-    return ;
 }
 
 
@@ -305,26 +286,27 @@ char* getIP(){
 
 int zcs_init(int type , char *MulticastConfig){
     //MulticastConfig = "ip#sport#rport"
-
     AppM = multicast_init(LanIp, APPRPORT, APPSPORT);
     ServiceM = multicast_init(LanIp, SERVICERPORT, SERVICESPORT);
+    if(AppM == NULL || ServiceM == NULL ){
+        return -1;
+    }
+    if (type != ZCS_APP_TYPE && type != ZCS_SERVICE_TYPE )
+    {
+        return -1;
+    }    
     Nodetype = type;
     if (type == ZCS_APP_TYPE)
     {
         LocalR = (LocalRegistry *)malloc(MAX_SERVICES*sizeof(LocalRegistry));
+        if(LocalR == NULL){return -1;}
         isInit = 1;
-        //Add listenner
     }
     else if (type == ZCS_SERVICE_TYPE)
     {
         isInit = 1;
-        //Add beater and listenner
-    }
-    else{
-       return -1;
     }
     return 0;
-    
 };
 
 int zcs_start(char *name, zcs_attribute_t attr[], int num){
@@ -337,7 +319,6 @@ int zcs_start(char *name, zcs_attribute_t attr[], int num){
         pthread_create(&ListenerThread, NULL, ServiceListenThread, NULL); 
         pthread_create(&HeartBeatGenerateThread, NULL, HBSenderThread,NULL);
     }
-    
     return 0;
     
 }
@@ -354,13 +335,12 @@ int zcs_query(char *attr_name, char *attr_value, char *node_names[]){
             for (int j = 0; j < MAX_SERVICE_ATTRIBUTE; j++){
                 if (strcmp(attr_name,LocalR[i].AttributeList[j].attr_name) == 0 && 
                     strcmp(attr_value, LocalR[i].AttributeList[j].value) == 0){
-                        node_names[count++] = LocalR[i].serviceName;
+                        strcpy(node_names[count++] , LocalR[i].serviceName);
                     }
             }
         }
     }
-    return 0;
-
+    return count;
 };
 
 int zcs_get_attribs(char *name, zcs_attribute_t attr[], int *num){
@@ -368,10 +348,8 @@ int zcs_get_attribs(char *name, zcs_attribute_t attr[], int *num){
     for (int i = 0; i < MAX_SERVICES; i++){
         if (LocalR[i] != NULL && strcmp(LocalR[i].serviceName,name) == 0){
             for (int count = 0; count < num; count++){
-                zcs_attribute_t copy;
-                copy.attr_name = LocalR[i].AttributeList[count].attr_name;
-                copy.attr_name = LocalR[i].AttributeList[count].value;
-                attr[count] = copy;
+                strcpy(attr[count].attr_name , LocalR[i].AttributeList[count].attr_name);
+                strcpy(attr[count].attr_name , LocalR[i].AttributeList[count].value);
                 pthread_mutex_unlock(&mutex);
                 return 0;
             }
