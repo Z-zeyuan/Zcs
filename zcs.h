@@ -20,6 +20,7 @@ typedef struct {
 // Structure to hold service ID and its status
 typedef struct {
     char serviceName[64];
+    int attr_num;
     int isAliveTimeCount; // count for time receive counter
     int isAlive; // 0 for false, 1 for true
     zcs_attribute_t AttributeList[MAX_SERVICE_ATTRIBUTE];

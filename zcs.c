@@ -79,7 +79,7 @@ char* HeartBeatGenerate(char* ServiceName) {
 }
 
 char* NotificationGenerate(char *ServiceName, zcs_attribute_t attr[], int num) {
-    //"NOT#name#attname,attval;..."
+    //"NOT#name#attrnum#attname,attval;..."
     char *NotMsg = (char *)malloc(2048);
     strcat(NotMsg, "NOT#");
     strcat(NotMsg,ServiceName);
