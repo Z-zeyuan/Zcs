@@ -9,6 +9,11 @@ typedef struct {
     char *value;
 } zcs_attribute_t;
 
+typedef struct {
+    char *name;
+    int count;
+} dict;
+
 #define MAX_SERVICES 100
 #define MAX_SERVICE_ATTRIBUTE 10
 
@@ -17,9 +22,15 @@ typedef struct {
 
 #define SERVICESPORT 2019 
 #define SERVICERPORT 2020 
+
+#define MAX_MSG_Size 2048
+#define MAX_NODE_NAME_SIZE 64
+
+#define TIMEOUT 1
+
 // Structure to hold service ID and its status
 typedef struct {
-    char serviceName[64];
+    char serviceName[MAX_NODE_NAME_SIZE];
     int attr_num;
     int isAliveTimeCount; // count for time receive counter
     int isAlive; // 0 for false, 1 for true

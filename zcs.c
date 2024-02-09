@@ -1,6 +1,7 @@
 #include "zcs.h"
 #include <stdio.h>
 #include <pthread.h>
+#include <time.h>
 #include "multicast.h"
 
 
@@ -23,10 +24,9 @@ int AddNode(LocalRegistry r){
     for (int i = 0; i < MAX_SERVICES; i++){
         if (LocalR != NULL && strcmp(LocalR[i].serviceName,r.serviceName) == 0){
             pthread_mutex_unlock(&mutex);
-            freenode(r)
             return -1;           // Duplicate node name, reject
         }else if (LocalR == NULL){
-            LocalR[i] == r;
+            LocalR[i] = r;
             pthread_mutex_unlock(&mutex);
             return 0;           // Success
         }
@@ -155,24 +155,93 @@ LocalRegistry NotificationDecode(char *NotMsg) {
     
 }
 
+char* HeartBeatDecode(char *msg){
+
+}
+
+int messageType(char *msg){
+
+}
+
+void HeartbeatCount(dict *d, char *name){
+    for (int i = 0; i < MAX_MSG_Size; i++){
+        if (d[i] != NULL && strcmp(d[i].name, name) == 0){
+            d[i].count++;
+        }else if(d[i] == NULL){
+            d[i].name = name;
+            d[i].count = 0;
+        }
+    }
+}
+
+void updateThreadTable(dict *d){
+    pthread_mutex_unlock(&mutex);
+    for(int i = 0; i < MAX_SERVICES; i++){
+        if (d[i] == NULL) {
+            pthread_mutex_unlock(&mutex);
+            return;
+        }
+        else{
+            char *node_name = d[i].name;
+            int isAlive = (d[i].count >= 3) ? 1 : 0;
+            for (int j = 0; j < MAX_SERVICES; j++){
+                if (strcmp(LocalR[j].serviceName,node_name) == 0){
+                    LocalR[j].isAlive = isAlive;
+                }
+            }
+        }
+    }
+    pthread_mutex_unlock(&mutex);
+    return;
+}
+
 void *AppListenThread() {
+    dict *thread_table = malloc(MAX_SERVICES * sizeof(dict));
+    time_t start_time;
+    double elapsed_time;
+    int restart_time = 1;
     // in App
     while(1) {
+        if (restart_time == 1){
+            restart_time = 0;
+            start_time = time(NULL);
+        }
         //receive
-        char msg [100];
+        char msg [MAX_MSG_Size];
         multicast_setup_recv(ServiceM);
-        while (multicast_check_receive(ServiceM) == 0) {
-	    multicast_send(ServiceM, msg, strlen(msg));
-        msg is HB?
+        if (multicast_check_receive(ServiceM) == 0) {   // Check if there's new msg
+	    //multicast_send(ServiceM, msg, strlen(msg));
+        multicast_receive(ServiceM,msg,MAX_MSG_Size)
+        
+        int msgtype = messageType(msg);
 
-	    printf("repeat.. \n");
+        switch (msgtype)
+        {
+        case 1:         // Heartbeat
+            char node_name[MAX_NODE_NAME_SIZE] = HeartBeatDecode(msg);
+            HeartbeatCount(thread_table,node_name);
+            break;
+        case 2:         // Notification
+
+            LocalRegistry node = NotificationDecode(msg);
+            int errCode = AddNode(node);
+            
+            if (errCode == -1){
+                freenode(node);
+            }   // Otherwise continue
+
+            HeartbeatCount(thread_table,node.serviceName);
+            break;
+        default:
+            break;
+        }
+        }
+        if (difftime(time(NULL), start_time) >= TIMEOUT){
+            updateThreadTable(thread_table);
+            restart_time = 1;
         }
     }
     return ;
-}
-
-void *ServiceListenThread(){
-
 }
 
 
