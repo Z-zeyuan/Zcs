@@ -23,6 +23,7 @@ int AddNode(LocalRegistry r){
     for (int i = 0; i < MAX_SERVICES; i++){
         if (LocalR != NULL && strcmp(LocalR[i].serviceName,r.serviceName) == 0){
             pthread_mutex_unlock(&mutex);
+            freenode(r)
             return -1;           // Duplicate node name, reject
         }else if (LocalR == NULL){
             LocalR[i] == r;
@@ -32,6 +33,10 @@ int AddNode(LocalRegistry r){
     }
     pthread_mutex_unlock(&mutex);
     return -1;                  // FULL
+}
+
+void freenode(LocalRegistry Node){
+    attrlen
 }
 
 
@@ -78,9 +83,13 @@ char* NotificationGenerate(char *ServiceName, zcs_attribute_t attr[], int num) {
     strcat(NotMsg, "NOT#");
     strcat(NotMsg,ServiceName);
     strcat(NotMsg,"#");
+    char* numstring = (char *)malloc(2);
+    sprintf(numstring, "%d", num);
+    strcat(NotMsg,numstring);
+    strcat(NotMsg,"#");
     for (int i = 0; i < num; i++)
     {
-        char* Pair = (char *)malloc(70);
+        char* Pair = (char *)malloc(75);
         strcat(Pair,attr[i].attr_name);
         strcat(Pair,",");
         strcat(Pair,attr[i].value);
@@ -99,7 +108,7 @@ void SendMsg(mcast_t Destination, char* msg) {
     return ;
 }
 
-char* NotificationDecode(char *NotMsg) {
+LocalRegistry NotificationDecode(char *NotMsg) {
     //"name#attname,attval;..."
     LocalRegistry Newnode = malloc(sizeof(LocalRegistry));
     //char name[64];
@@ -108,6 +117,7 @@ char* NotificationDecode(char *NotMsg) {
     Newnode.isAlive=1;
     //add node
     char* buffer = strtok(NotMsg, ";");
+    int i=0;
     while (buffer != NULL)
     {
         
