@@ -70,6 +70,7 @@ int goUp(char *name){
 
 
 char* HeartBeatGenerate(char* ServiceName) {
+    //HB#ServiceName
     char *HBMsg = (char *)malloc(2048);
     strcat(HBMsg, "HB#");
     strcat(HBMsg,ServiceName);
