@@ -282,14 +282,25 @@ int zcs_get_attribs(char *name, zcs_attribute_t attr[], int *num){
 
 int zcs_listen_ad(char *name, zcs_cb_f cback){};
 
-int zcs_shutdown(){};
+int zcs_shutdown(){
+    if (Nodetype == ZCS_SERVICE_TYPE)
+    {
+        //join all threads
+    }
+    else
+    {
+        //join all threads
+    }
+    
+    
+};
 
 void zcs_log(){
     printf("====== Log ======\n");
     for (int i = 0; i < MAX_SERVICES; i++){
         if (LocalR[i] != NULL){
             printf("Name: %s, State: %s, Attributes: ",LocalR[i].serviceName, LocalR[i].isAlive);
-            for (int j = 0; j < MAX_SERVICE_ATTRIBUTE; j++){        // print all attributes of current node
+            for (int j = 0; j < LocalR[i].attr_num; j++){        // print all attributes of current node
                 if (LocalR[i].AttributeList[j] == NULL){
                     printf("\n");
                     break;
