@@ -84,6 +84,15 @@ char* HeartBeatGenerate(char* ServiceName) {
     
 }
 
+char* AdvertisementGenerate(char* ServiceName) {
+    //AD#ServiceName
+    char *HBMsg = (char *)malloc(2048);
+    strcat(HBMsg, "HB#");
+    strcat(HBMsg,ServiceName);
+    return HBMsg;
+    
+}
+
 char* NotificationGenerate(char *ServiceName, zcs_attribute_t attr[], int num) {
     //"NOT#name#attrnum#attname,attval;..."
     char *NotMsg = (char *)malloc(2048);
@@ -166,31 +175,7 @@ void *ServiceListenThread(){
 
 }
 
-void HeartBeatGenerate() {
-    while(1) {
-        //receive
-    }
-    return ;
-    
-}
 
-void NotificationGenerate() {
-    while(1) {
-        //receive
-    }
-    return ;
-    
-}
-
-void DiscoveryGenerate(){
-
-}
-
-void SendMsg(mcast_t Destination, char msg[]) {
-    
-    return ;
-    
-}
 
 
 
@@ -230,10 +215,12 @@ int zcs_init(int type , char *MulticastConfig){
     {
         LocalR = malloc(MAX_SERVICES*sizeof(LocalRegistry));
         isInit = 1;
+        //Add listenner
     }
     else if (type == ZCS_SERVICE_TYPE)
     {
         isInit = 1;
+        //Add beater and listenner
     }
     else{
         
