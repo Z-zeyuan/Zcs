@@ -9,6 +9,8 @@
 int isInit = 0; // 0 for false, 1 for true
 char *LanIp ; 
 int Nodetype;
+char * NodeName = (char *)malloc(64);
+
 
 mcast_t *AppM;
 mcast_t *ServiceM;
@@ -16,8 +18,8 @@ mcast_t *ServiceM;
 LocalRegistry *LocalR;
 
 pthread_mutex_t mutex = PTHREAD_COND_INITIALIZER;
-pthread_t newThread;
-
+pthread_t ListenerThread;
+pthread_t HeartBeatGenerateThread;
 
 int AddNode(LocalRegistry r){
     pthread_mutex_lock(&mutex);
@@ -126,7 +128,7 @@ void SendMsg(mcast_t Destination, char* msg) {
 
 LocalRegistry NotificationDecode(char *NotMsg) {
     //"name#attname,attval;..."
-    LocalRegistry Newnode = malloc(sizeof(LocalRegistry));
+    LocalRegistry Newnode =(LocalRegistry *)malloc(sizeof(LocalRegistry));
     //char name[64];
     char* buffer = (char *)malloc(100);
     buffer = strtok(NotMsg, "#");
@@ -196,7 +198,7 @@ void updateThreadTable(dict *d){
 }
 
 void *AppListenThread() {
-    dict *thread_table = malloc(MAX_SERVICES * sizeof(dict));
+    dict *thread_table = (dict *)malloc(MAX_SERVICES * sizeof(dict));
     time_t start_time;
     double elapsed_time;
     int restart_time = 1;
@@ -246,6 +248,33 @@ void *AppListenThread() {
 
 
 
+void *HBSenderThread() {
+    time_t start_time;
+    int restart_time = 1;
+    // in App
+    while(1) {
+        if (restart_time == 1){
+            restart_time = 0;
+            start_time = time(NULL);
+        }
+        //receive
+        char* msg = HeartBeatGenerate();
+        multicast_setup_recv(ServiceM);
+        if (multicast_check_receive(ServiceM) == 0) {   // Check if there's new msg
+	    //multicast_send(ServiceM, msg, strlen(msg));
+        multicast_receive(ServiceM,msg,MAX_MSG_Size)
+        
+        
+        }
+        if (difftime(time(NULL), start_time) >= TIMEOUT){
+            updateThreadTable(thread_table);
+            restart_time = 1;
+        }
+    }
+    return ;
+}
+
+
 
 
 char* getIP(){
@@ -282,7 +311,7 @@ int zcs_init(int type , char *MulticastConfig){
     Nodetype = type;
     if (type == ZCS_APP_TYPE)
     {
-        LocalR = malloc(MAX_SERVICES*sizeof(LocalRegistry));
+        LocalR = (LocalRegistry *)malloc(MAX_SERVICES*sizeof(LocalRegistry));
         isInit = 1;
         //Add listenner
     }
@@ -292,22 +321,25 @@ int zcs_init(int type , char *MulticastConfig){
         //Add beater and listenner
     }
     else{
-        return 0;
+       return -1;
     }
-    return -1;
+    return 0;
     
 };
 
 int zcs_start(char *name, zcs_attribute_t attr[], int num){
-
-    
+    if(isInit == 0){return -1;}
+    NodeName = name;
     if(Nodetype == ZCS_APP_TYPE){      // APP
+        pthread_create(&ListenerThread, NULL, AppListenThread, NULL); 
         DiscoveryGenerate();
-        pthread_create(&newThread, NULL, AppListenThread, NULL); 
     }else{                  // Service
-        pthread_create(&newThread, NULL, ServiceListenThread, NULL); 
+        pthread_create(&ListenerThread, NULL, ServiceListenThread, NULL); 
+        pthread_create(&HeartBeatGenerateThread, NULL, HBSenderThread,NULL);
     }
-    pthread_create(&heartbeatThread, NULL, HeartBeatGenerate,NULL);
+    
+    return 0;
+    
 }
 
 
