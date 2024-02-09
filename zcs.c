@@ -36,7 +36,13 @@ int AddNode(LocalRegistry r){
 }
 
 void freenode(LocalRegistry Node){
-    attrlen
+    int attrlen = Node.attr_num;
+    for (int i = 0; i < attrlen; i++)
+    {
+        free(Node.AttributeList[i].attr_name);
+        free(Node.AttributeList[i].value);
+    }
+    free(Node);
 }
 
 
@@ -121,7 +127,7 @@ LocalRegistry NotificationDecode(char *NotMsg) {
     Newnode.attr_num = num;
     Newnode.isAlive=1;
     //add node
-    char* buffer = strtok(NotMsg, ";");
+    buffer = strtok(NotMsg, ";");
     int i=0;
     while (buffer != NULL)
     {
@@ -130,13 +136,13 @@ LocalRegistry NotificationDecode(char *NotMsg) {
         char* attrval = (char *)malloc(30);
         strcpy(attrname,strtok(buffer, ","));
         strcpy(attrval,buffer);
-        
-        
-        
+        Newnode.AttributeList[i].attr_name=attrname;
+        Newnode.AttributeList[i].value=attrval;
+        i++;
     }
     
-    str[strlen(NotMsg); - 1] = '\0';
-    return NotMsg;
+    free(NotMsg);
+    return Newnode;
     
 }
 
