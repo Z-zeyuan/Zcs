@@ -102,10 +102,9 @@ void SendMsg(mcast_t Destination, char* msg) {
 char* NotificationDecode(char *NotMsg) {
     //"name#attname,attval;..."
     LocalRegistry Newnode = malloc(sizeof(LocalRegistry));
-    char name[64];
+    //char name[64];
     char* buffer = strtok(NotMsg, "#");
-    strcpy(name,buffer);
-    Newnode.serviceName = name;
+    strcpy(Newnode.serviceName,buffer);
     Newnode.isAlive=1;
     //add node
     char* buffer = strtok(NotMsg, ";");
