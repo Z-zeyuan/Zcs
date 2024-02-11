@@ -77,19 +77,19 @@ int goUp(char *name){
 }
 
 
-char* HeartBeatGenerate(char* ServiceName) {
+char* HeartBeatGenerate(char ServiceName[]) {
     //HB#ServiceName
-    char *HBMsg = (char *)malloc(2048);
+    char *HBMsg = (char *)malloc(MAX_MSG_Size);
     strcat(HBMsg, "HB#");
     strcat(HBMsg,ServiceName);
     return HBMsg;
     
 }
 
-char* AdvertisementGenerate(char* ServiceName) {
+char* AdvertisementGenerate(char* AdName, char* AdVal) {
     //AD#ServiceName
-    char *HBMsg = (char *)malloc(2048);
-    strcat(HBMsg, "HB#");
+    char *HBMsg = (char *)malloc(MAX_MSG_Size);
+    strcat(HBMsg, "AD#");
     strcat(HBMsg,ServiceName);
     return HBMsg;
     
@@ -97,7 +97,7 @@ char* AdvertisementGenerate(char* ServiceName) {
 
 char* NotificationGenerate(char *ServiceName, zcs_attribute_t attr[], int num) {
     //"NOT#name#attrnum#attname,attval;..."
-    char *NotMsg = (char *)malloc(2048);
+    char *NotMsg = (char *)malloc(MAX_MSG_Size);
     strcat(NotMsg, "NOT#");
     strcat(NotMsg,ServiceName);
     strcat(NotMsg,"#");
@@ -116,7 +116,7 @@ char* NotificationGenerate(char *ServiceName, zcs_attribute_t attr[], int num) {
         free(Pair)
     }
     
-    str[strlen(NotMsg); - 1] = '\0';
+    NotMsg[strlen(NotMsg); - 1] = '\0';
     return NotMsg;
     
 }
@@ -130,25 +130,46 @@ LocalRegistry NotificationDecode(char *NotMsg) {
     //"name#attname,attval;..."
     LocalRegistry Newnode =(LocalRegistry *)malloc(sizeof(LocalRegistry));
     //char name[64];
+    char *NotMsg_copy = (char *)malloc(MAX_MSG_Size);
+    strcpy(NotMsg_copy,NotMsg);
     char* buffer = (char *)malloc(100);
-    buffer = strtok(NotMsg, "#");
+    buffer = strtok_r(NotMsg_copy, "#",&NotMsg_copy);
+
+    buffer[strlen(buffer) - 1] = '\0';
+    NotMsg_copy[strlen(NotMsg_copy) - 1] = '\0';
+
     strcpy(Newnode.serviceName,buffer);
-    buffer = strtok(NotMsg, "#");
+    buffer = strtok_r(NotMsg_copy, "#",&NotMsg_copy);
+    
+    buffer[strlen(buffer) - 1] = '\0';
+    NotMsg_copy[strlen(NotMsg_copy) - 1] = '\0';
+
     int num = atoi(buffer);
     Newnode.attr_num = num;
     Newnode.isAlive=1;
     //add node
-    buffer = strtok(NotMsg, ";");
+    buffer = strtok_r(NotMsg_copy, ";",&NotMsg_copy);
+    buffer[strlen(buffer) - 1] = '\0';
+    NotMsg_copy[strlen(NotMsg_copy) - 1] = '\0';
+
     int i=0;
     while (buffer != NULL)
     {
         
         char* attrname = (char *)malloc(40);
         char* attrval = (char *)malloc(30);
-        strcpy(attrname,strtok(buffer, ","));
+        strcpy(attrname,strtok_r(buffer, ",",&buffer));
         strcpy(attrval,buffer);
+        
+        attrname[strlen(attrname) - 1] = '\0';
+        attrval[strlen(attrval) - 1] = '\0';
+
         Newnode.AttributeList[i].attr_name=attrname;
         Newnode.AttributeList[i].value=attrval;
+        
+        buffer = strtok_r(NotMsg_copy, ";",&NotMsg_copy);
+        buffer[strlen(buffer) - 1] = '\0';
+        NotMsg_copy[strlen(NotMsg_copy) - 1] = '\0';    
         i++;
     }
     
@@ -160,7 +181,20 @@ LocalRegistry NotificationDecode(char *NotMsg) {
 
 
 int messageType(char *msg){
-
+    char* HeadLable = strtok_r(msg, "#",&msg);
+    HeadLable[strlen(HeadLable) - 1] = '\0';
+    msg[strlen(msg) - 1] = '\0';
+    if (strcmp(HeadLable,"HB")){
+        return 1;
+    }
+    else if (strcmp(HeadLable,"NOT")){
+        return 2;
+    }
+    else if (strcmp(HeadLable,"AD")){
+        return 3;
+    }
+    return 99;
+    
 }
 
 void HeartbeatCount(dict *d, char *name){
@@ -216,7 +250,7 @@ void *AppListenThread() {
             restart_time = 1;
             }   
         }
-        multicast_receive(ServiceM,msg,MAX_MSG_Size)
+        multicast_receive(ServiceM,msg,MAX_MSG_Size);
         
         int msgtype = messageType(msg);
 
@@ -255,7 +289,6 @@ void *ServiceListenThread(){
         while (multicast_check_receive(ServiceM) == 0) {
             // Spin
             if (difftime(time(NULL), start_time) >= TIMEOUT){
-            updateThreadTable(thread_table);
             restart_time = 1;
         }
         }
@@ -269,7 +302,7 @@ void *HBSenderThread() {
     // in App
     while(1) {
         sleep(0.01);
-        char* HBmsg = HeartBeatGenerate(NodeName);
+        char* HBmsg = HeartBeatGenerate(thisNode->serviceName);
         SendMsg(AppM,HBmsg);
     }
 }
