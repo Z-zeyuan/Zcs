@@ -88,10 +88,12 @@ char* HeartBeatGenerate(char ServiceName[]) {
 
 char* AdvertisementGenerate(char* AdName, char* AdVal) {
     //AD#ServiceName
-    char *HBMsg = (char *)malloc(MAX_MSG_Size);
-    strcat(HBMsg, "AD#");
-    strcat(HBMsg,ServiceName);
-    return HBMsg;
+    char *ADMsg = (char *)malloc(MAX_MSG_Size);
+    strcat(ADMsg, "AD#");
+    strcat(ADMsg,AdName);
+    strcat(ADMsg,";");
+    strcat(ADMsg,AdVal);
+    return ADMsg;
     
 }
 
