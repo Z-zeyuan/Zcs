@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <time.h>
+#include <string.h>
 #include "multicast.h"
 
 int AD_Post_Num 5;
@@ -153,7 +154,7 @@ int SendWaveMsg(mcast_t Destination, char *msg, float interval, int WaveSize)
         SendMsg(Destination, msg);
         count++;
     }
-
+    free(msg);
     return count;
 }
 
@@ -206,6 +207,7 @@ LocalRegistry NotificationDecode(char *NotMsg)
     }
 
     free(NotMsg);
+    free(buffer);
     return Newnode;
 }
 
@@ -309,7 +311,8 @@ void *AppListenThread()
         switch (msgtype)
         {
         case 1: // Heartbeat
-            char node_name[MAX_NODE_NAME_SIZE] = HeartBeatDecode(msg);
+            char node_name[MAX_NODE_NAME_SIZE];
+            strcpy(node_name,msg);
             HeartbeatCount(thread_table, node_name);
             break;
         case 2: // Notification
@@ -342,7 +345,7 @@ void *AppListenThread()
                 if (AdListenDict[i] != NULL && strcmp(AdListenDict[i].SName, buffer) == 0)
                 {
                     char *AdName = (char *)malloc(200);
-                    AdName = strtok_r(ADMsg_copy, "#", &ADMsg_copy);
+                    AdName = strtok_r(ADMsg_copy, ";", &ADMsg_copy);
                     AdName[strlen(buffer) - 1] = '\0';
                     ADMsg_copy[strlen(ADMsg_copy) - 1] = '\0';
                     char* AdVal = ADMsg_copy;
@@ -397,10 +400,11 @@ void *ServiceListenThread()
 void *HBSenderThread()
 {
     // in App
+    char *HBmsg = HeartBeatGenerate(thisNode->serviceName);
     while (join_threads == 0)
     {
         sleep(0.01);
-        char *HBmsg = HeartBeatGenerate(thisNode->serviceName);
+        
         SendMsg(AppM, HBmsg);
     }
 }
@@ -591,7 +595,7 @@ int zcs_listen_ad(char *name, zcs_cb_f cback){
 
 int zcs_shutdown()
 {
-    if (isInit == 0) return -1;
+    if (isInit == 0 || thisNode == NULL) return -1;
     int errCode;
     join_threads = 1;
     if (Nodetype == ZCS_SERVICE_TYPE)
