@@ -5,25 +5,28 @@
 #include <string.h>
 #include "multicast.h"
 
-int AD_Post_Num 5;
-int AD_Send_Interval 0.1;
+int AD_Post_Num = 5;
+int AD_Send_Interval = 0.1;
 
-int isInit = 0; // 0 for false, 1 for true
+int isInit = 0;                     // 0 for false, 1 for true
 char *LanIp;
 int Nodetype;
-int join_threads = 0;
+int join_threads = 0;               // 0 for false, 1 for true
 LocalRegistry *thisNode == NULL;
 
-mcast_t *AppM;
+mcast_t *AppM;                      
 mcast_t *ServiceM;
 
-LocalRegistry *LocalR;
+LocalRegistry *LocalR;              // Pointer of local registry table
+
 AdCallbackListenDict *AdListenDict = NULL;
 pthread_mutex_t mutex = PTHREAD_COND_INITIALIZER;
-pthread_t ListenerThread;
+pthread_t ListenerThread;           
 pthread_t HeartBeatGenerateThread;
 
 
+/* Add a node to the local registry. Do nothing and return -1 if node exists. 
+    Return 0 if success. Return -2 if no available space.*/
 int AddNode(LocalRegistry r)
 {
     pthread_mutex_lock(&mutex);
@@ -42,7 +45,7 @@ int AddNode(LocalRegistry r)
         }
     }
     pthread_mutex_unlock(&mutex);
-    return -1; // FULL
+    return -2; // FULL
 }
 
 void freenode(LocalRegistry Node)
@@ -56,40 +59,7 @@ void freenode(LocalRegistry Node)
     free(Node);
 }
 
-/*  Switch Node State to DOWN */
-int goDown(char *name)
-{
-    pthread_mutex_lock(&mutex);
-    for (int i = 0; i < MAX_SERVICES; i++)
-    {
-        if (LocalR[i] != NULL && strcmp(name, LocalR[i].serviceName) == 0)
-        {
-            LocalR[i].isAlive = 0;
-            pthread_mutex_unlock(&mutex);
-            return 0;
-        }
-    }
-    pthread_mutex_unlock(&mutex);
-    return 1;
-}
-
-/*  Switch Node State to UP */
-int goUp(char *name)
-{
-    pthread_mutex_lock(&mutex);
-    for (int i = 0; i < MAX_SERVICES; i++)
-    {
-        if (LocalR[i] != NULL && strcmp(name, LocalR[i].serviceName) == 0)
-        {
-            LocalR[i].isAlive = 1;
-            pthread_mutex_unlock(&mutex);
-            return 0;
-        }
-    }
-    pthread_mutex_unlock(&mutex);
-    return 1;
-}
-
+/*  Generate and return a HEARTBEAT message for the given node name. */
 char *HeartBeatGenerate(char ServiceName[])
 {
     // HB#ServiceName
@@ -99,6 +69,7 @@ char *HeartBeatGenerate(char ServiceName[])
     return HBMsg;
 }
 
+/* Generate and return an advertisement message. */
 char *AdvertisementGenerate(char *AdName, char *AdVal)
 {
     // AD#ServiceName#Adname;Adval
@@ -112,6 +83,7 @@ char *AdvertisementGenerate(char *AdName, char *AdVal)
     return ADMsg;
 }
 
+/* Generate a notification message.  */
 char *NotificationGenerate(char *ServiceName, zcs_attribute_t attr[], int num)
 {
     //"NOT#name#attrnum#attname,attval;..."
@@ -138,12 +110,14 @@ char *NotificationGenerate(char *ServiceName, zcs_attribute_t attr[], int num)
     return NotMsg;
 }
 
+/* Send the message to the given multicast channel. */
 void SendMsg(mcast_t Destination, char *msg)
 {
     multicast_send(Destination, msg, strlen(msg));
     return;
 }
 
+/* Send 'WaveSize' number of messages in 'interval' time to the given multicast channel*/
 int SendWaveMsg(mcast_t Destination, char *msg, float interval, int WaveSize)
 {
     int count = 0;
@@ -158,6 +132,7 @@ int SendWaveMsg(mcast_t Destination, char *msg, float interval, int WaveSize)
     return count;
 }
 
+/* Decode the given notification message, then generate and return a node */
 LocalRegistry NotificationDecode(char *NotMsg)
 {
     //"name#attname,attval;..."
@@ -211,6 +186,12 @@ LocalRegistry NotificationDecode(char *NotMsg)
     return Newnode;
 }
 
+/* Return an integer that represents the message type of the given message.
+    Return 1 if it's HEARTBEAT
+    Return 2 if it's Nofitication
+    Return 3 if it's Advertisement
+    Return 20 if it's Discovery
+    Return 99 otherwise. */
 int messageType(char *msg)
 {
     char *HeadLable = strtok_r(msg, "#", &msg);
@@ -278,6 +259,10 @@ void updateThreadTable(dict *d)
     return;
 }
 
+/* Thread function that listens all message for app. 
+    Once a msg is received, it decodes the msg and do different 
+    work, based on the type and the body of the msg. 
+    Thread terminates if zcs_shundown() is called. */
 void *AppListenThread()
 {
     dict *thread_table = (dict *)malloc(MAX_SERVICES * sizeof(dict));
@@ -323,15 +308,12 @@ void *AppListenThread()
             if (errCode == -1)
             {
                 freenode(node);
-                // If Notfication is not considered heart beat,
-                // thus very strict status of network is required, we should break
-                // break;
-
+                break;
             } // Otherwise continue
 
             HeartbeatCount(thread_table, node.serviceName);
             break;
-        case 3: // Notification
+        case 3: // Advertisement
             char *ADMsg_copy = (char *)malloc(MAX_MSG_Size);
             strcpy(ADMsg_copy, msg);
             char *buffer = (char *)malloc(100);
@@ -368,6 +350,10 @@ void *AppListenThread()
     return;
 }
 
+/* Thread function that listens all message for service. 
+    Once a msg is received, it decodes the msg and do different 
+    work, based on the type and the body of the msg. 
+    Thread terminates if zcs_shundown() is called. */
 void *ServiceListenThread()
 {
     // Service
@@ -397,6 +383,7 @@ void *ServiceListenThread()
     return;
 }
 
+/* Thread function that keeps sending HEARTBEAT msg. */
 void *HBSenderThread()
 {
     // in App
@@ -451,6 +438,8 @@ int zcs_init(int type, char *MulticastConfig)
     {
         return -1;
     }
+
+
     Nodetype = type;
     if (type == ZCS_APP_TYPE)
     {
@@ -518,9 +507,7 @@ int zcs_start(char *name, zcs_attribute_t attr[], int num)
         pthread_create(&HeartBeatGenerateThread, NULL, HBSenderThread, NULL);
         
     }
-    else
-    { // APP, may not need anything,won't hurt
-    }
+    // Do nothing is it's APP_TYPE
 
     return 0;
 }

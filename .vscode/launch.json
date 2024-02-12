@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "c:/Users/16016/Zcs/Zcs",
-      "program": "c:/Users/16016/Zcs/Zcs/build/Debug/outDebug",
+      "cwd": "c:/Users/ericj/Zcs",
+      "program": "c:/Users/ericj/Zcs/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [

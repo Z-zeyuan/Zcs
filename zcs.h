@@ -4,8 +4,21 @@
 #define ZCS_APP_TYPE                1
 #define ZCS_SERVICE_TYPE            2
 
-typedef void (*zcs_cb_f)(char *, char *);
+#define MAX_SERVICES 100            // Max number of nodes in local registry
+#define MAX_SERVICE_ATTRIBUTE 10    // Max number of attributes of a node
 
+#define APPSPORT 2024 
+#define APPRPORT 2025 
+
+#define SERVICESPORT 2019 
+#define SERVICERPORT 2020 
+
+#define MAX_MSG_Size 2048           // Max size of a msg
+#define MAX_NODE_NAME_SIZE 64       // Max size of a node's name
+
+#define TIMEOUT 1                   // Time interval for checking nodes' state
+
+typedef void (*zcs_cb_f)(char *, char *);
 
 typedef struct {
     char *attr_name;
@@ -22,32 +35,14 @@ typedef struct {
     zcs_cb_f callback;
 } AdCallbackListenDict;
 
-#define MAX_SERVICES 100
-#define MAX_SERVICE_ATTRIBUTE 10
-
-#define APPSPORT 2024 
-#define APPRPORT 2025 
-
-#define SERVICESPORT 2019 
-#define SERVICERPORT 2020 
-
-#define MAX_MSG_Size 2048
-#define MAX_NODE_NAME_SIZE 64
-
-#define TIMEOUT 1
-
-
-
-
 // Structure to hold service ID and its status
 typedef struct {
     char serviceName[MAX_NODE_NAME_SIZE];
-    int attr_num;
-    int isAliveTimeCount; // count for time receive counter
-    int isAlive; // 0 for false, 1 for true
-    zcs_attribute_t AttributeList[MAX_SERVICE_ATTRIBUTE];
+    int attr_num;                   // Number of attributes
+    int isAliveTimeCount;           // count for time receive counter
+    int isAlive;                    // 0 for false, 1 for true
+    zcs_attribute_t AttributeList[MAX_SERVICE_ATTRIBUTE];   // List of attributes
 }LocalRegistry;
-
 
 
 int zcs_init(int type , char *MulticastConfig);
