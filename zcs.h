@@ -39,13 +39,12 @@ typedef struct {
 typedef struct {
     char serviceName[MAX_NODE_NAME_SIZE];
     int attr_num;                   // Number of attributes
-    int isAliveTimeCount;           // count for time receive counter
     int isAlive;                    // 0 for false, 1 for true
     zcs_attribute_t AttributeList[MAX_SERVICE_ATTRIBUTE];   // List of attributes
 }LocalRegistry;
 
 
-int zcs_init(int type , char *MulticastConfig);
+int zcs_init(int type);
 int zcs_start(char *name, zcs_attribute_t attr[], int num);
 int zcs_post_ad(char *ad_name, char *ad_value);
 int zcs_query(char *attr_name, char *attr_value, char *node_names[], int namelen);

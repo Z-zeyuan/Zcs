@@ -1,12 +1,14 @@
 #include "zcs.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <pthread.h>
 #include <time.h>
 #include <string.h>
 #include "multicast.h"
 
 int AD_Post_Num = 5;
-float AD_Send_Interval = 0.1;
+//micro sec
+int AD_Send_Interval = 100000;
 
 int isInit = 0;                     // 0 for false, 1 for true
 char *LanIp;
@@ -48,13 +50,13 @@ int AddNode(LocalRegistry r)
     return -2; // FULL
 }
 
-void freenode(LocalRegistry Node)
+void freenode(LocalRegistry *Node)
 {
-    int attrlen = Node.attr_num;
+    int attrlen = Node->attr_num;
     for (int i = 0; i < attrlen; i++)
     {
-        free(Node.AttributeList[i].attr_name);
-        free(Node.AttributeList[i].value);
+        free(Node->AttributeList[i].attr_name);
+        free(Node->AttributeList[i].value);
     }
     free(Node);
 }
@@ -103,28 +105,28 @@ char *NotificationGenerate(char *ServiceName, zcs_attribute_t attr[], int num)
         strcat(Pair, attr[i].value);
         strcat(Pair, ";");
         strcat(NotMsg, Pair);
-        free(Pair)
+        free(Pair);
     }
 
-    NotMsg[strlen(NotMsg); -1] = '\0';
+    NotMsg[strlen(NotMsg) -1] = '\0';
     return NotMsg;
 }
 
 /* Send the message to the given multicast channel. */
-void SendMsg(mcast_t Destination, char *msg)
+void SendMsg(mcast_t *Destination, char *msg)
 {
     multicast_send(Destination, msg, strlen(msg));
     return;
 }
 
 /* Send 'WaveSize' number of messages in 'interval' time to the given multicast channel*/
-int SendWaveMsg(mcast_t Destination, char *msg, float interval, int WaveSize)
+int SendWaveMsg(mcast_t *Destination, char *msg, int interval, int WaveSize)
 {
     int count = 0;
     for (int i = 0; i < WaveSize; i++)
     {
         
-        sleep(interval);
+        usleep(interval);
         SendMsg(Destination, msg);
         count++;
     }
@@ -133,10 +135,10 @@ int SendWaveMsg(mcast_t Destination, char *msg, float interval, int WaveSize)
 }
 
 /* Decode the given notification message, then generate and return a node */
-LocalRegistry NotificationDecode(char *NotMsg)
+LocalRegistry* NotificationDecode(char *NotMsg)
 {
     //"name#attname,attval;..."
-    LocalRegistry Newnode = (LocalRegistry *)malloc(sizeof(LocalRegistry));
+    LocalRegistry* Newnode = (LocalRegistry *)malloc(sizeof(LocalRegistry));
     // char name[64];
     char *NotMsg_copy = (char *)malloc(MAX_MSG_Size);
     strcpy(NotMsg_copy, NotMsg);
@@ -146,15 +148,15 @@ LocalRegistry NotificationDecode(char *NotMsg)
     buffer[strlen(buffer) - 1] = '\0';
     NotMsg_copy[strlen(NotMsg_copy) - 1] = '\0';
 
-    strcpy(Newnode.serviceName, buffer);
+    strcpy(Newnode->serviceName, buffer);
     buffer = strtok_r(NotMsg_copy, "#", &NotMsg_copy);
 
     buffer[strlen(buffer) - 1] = '\0';
     NotMsg_copy[strlen(NotMsg_copy) - 1] = '\0';
 
     int num = atoi(buffer);
-    Newnode.attr_num = num;
-    Newnode.isAlive = 1;
+    Newnode->attr_num = num;
+    Newnode->isAlive = 1;
     // add node
     buffer = strtok_r(NotMsg_copy, ";", &NotMsg_copy);
     buffer[strlen(buffer) - 1] = '\0';
@@ -172,8 +174,8 @@ LocalRegistry NotificationDecode(char *NotMsg)
         attrname[strlen(attrname) - 1] = '\0';
         attrval[strlen(attrval) - 1] = '\0';
 
-        Newnode.AttributeList[i].attr_name = attrname;
-        Newnode.AttributeList[i].value = attrval;
+        Newnode->AttributeList[i].attr_name = attrname;
+        Newnode->AttributeList[i].value = attrval;
 
         buffer = strtok_r(NotMsg_copy, ";", &NotMsg_copy);
         buffer[strlen(buffer) - 1] = '\0';
@@ -220,11 +222,11 @@ void HeartbeatCount(dict *d, char *name)
 {
     for (int i = 0; i < MAX_MSG_Size; i++)
     {
-        if (d[i] != NULL && strcmp(d[i].name, name) == 0)
+        if (d[i].name != NULL && strcmp(d[i].name, name) == 0)
         {
             d[i].count++;
         }
-        else if (d[i] == NULL)
+        else if (d[i].name == NULL)
         {
             d[i].name = name;
             d[i].count = 1;
@@ -237,7 +239,7 @@ void updateThreadTable(dict *d)
     pthread_mutex_unlock(&mutex);
     for (int i = 0; i < MAX_SERVICES; i++)
     {
-        if (d[i] == NULL)
+        if (d[i].name == NULL)
         {
             pthread_mutex_unlock(&mutex);
             return;
@@ -302,8 +304,8 @@ void *AppListenThread()
             break;
         case 2: // Notification
 
-            LocalRegistry node = NotificationDecode(msg);
-            int errCode = AddNode(node);
+            LocalRegistry* node = NotificationDecode(msg);
+            int errCode = AddNode(*node);
 
             if (errCode == -1)
             {
@@ -311,7 +313,7 @@ void *AppListenThread()
                 break;
             } // Otherwise continue
 
-            HeartbeatCount(thread_table, node.serviceName);
+            HeartbeatCount(thread_table, node->serviceName);
             break;
         case 3: // Advertisement
             char *ADMsg_copy = (char *)malloc(MAX_MSG_Size);
@@ -324,16 +326,16 @@ void *AppListenThread()
 
             for (int i = 0; i < MAX_MSG_Size; i++)
             {
-                if (AdListenDict[i] != NULL && strcmp(AdListenDict[i].SName, buffer) == 0)
+                if (AdListenDict[i].SName != NULL && strcmp(AdListenDict[i].SName, buffer) == 0)
                 {
                     char *AdName = (char *)malloc(200);
                     AdName = strtok_r(ADMsg_copy, ";", &ADMsg_copy);
                     AdName[strlen(buffer) - 1] = '\0';
                     ADMsg_copy[strlen(ADMsg_copy) - 1] = '\0';
                     char* AdVal = ADMsg_copy;
-                    AdListenDict.callback(AdName,AdVal);
+                    AdListenDict->callback(AdName,AdVal);
                 }
-                else if (AdListenDict[i] == NULL)
+                else if (AdListenDict[i].SName == NULL)
                 {break;}
             }
 
@@ -390,42 +392,42 @@ void *HBSenderThread()
     char *HBmsg = HeartBeatGenerate(thisNode->serviceName);
     while (join_threads == 0)
     {
-        sleep(0.01);
+        usleep(10000);
         
         SendMsg(AppM, HBmsg);
     }
 }
 
-char *getIP()
-{
-    char hostname[1024];
-    struct hostent *host_entry;
-    char *ip;
+// char *getIP()
+// {
+//     char hostname[1024];
+//     struct hostent *host_entry;
+//     char *ip;
 
-    // Get the hostname
-    if (gethostname(hostname, sizeof(hostname)) == -1)
-    {
-        perror("gethostname");
-        return 1;
-    }
+//     // Get the hostname
+//     if (gethostname(hostname, sizeof(hostname)) == -1)
+//     {
+//         perror("gethostname");
+//         return 1;
+//     }
 
-    // Get hostent structure for the hostname
-    if ((host_entry = gethostbyname(hostname)) == NULL)
-    {
-        perror("gethostbyname");
-        return 1;
-    }
+//     // Get hostent structure for the hostname
+//     if ((host_entry = gethostbyname(hostname)) == NULL)
+//     {
+//         perror("gethostbyname");
+//         return 1;
+//     }
 
-    // Convert the IP address to a string
-    ip = inet_ntoa(*(struct in_addr *)host_entry->h_addr_list[0]);
+//     // Convert the IP address to a string
+//     ip = inet_ntoa(*(struct in_addr *)host_entry->h_addr_list[0]);
 
-    printf("Hostname: %s\n", hostname);
-    printf("IP Address: %s\n", ip);
+//     printf("Hostname: %s\n", hostname);
+//     printf("IP Address: %s\n", ip);
 
-    return ip;
-}
+//     return ip;
+// }
 
-int zcs_init(int type, char *MulticastConfig)
+int zcs_init(int type)
 {
     // MulticastConfig = "ip#sport#rport"
     AppM = multicast_init(LanIp, APPRPORT, APPSPORT);
@@ -525,12 +527,12 @@ int zcs_post_ad(char *ad_name, char *ad_value)
     return c;
 };
 
-int zcs_query(char *attr_name, char *attr_value, char *node_names[])
+int zcs_query(char *attr_name, char *attr_value, char *node_names[], int namelen)
 {
     int count = 0;
     for (int i = 0; i < MAX_SERVICES; i++)
     {
-        if (LocalR[i] != NULL)
+        if (LocalR[i].serviceName != NULL)
         {
             for (int j = 0; j < MAX_SERVICE_ATTRIBUTE; j++)
             {
@@ -550,9 +552,9 @@ int zcs_get_attribs(char *name, zcs_attribute_t attr[], int *num)
     pthread_mutex_lock(&mutex);
     for (int i = 0; i < MAX_SERVICES; i++)
     {
-        if (LocalR[i] != NULL && strcmp(LocalR[i].serviceName, name) == 0)
+        if (LocalR[i].serviceName != NULL && strcmp(LocalR[i].serviceName, name) == 0)
         {
-            for (int count = 0; count < num; count++)
+            for (int count = 0; count < *num; count++)
             {
                 strcpy(attr[count].attr_name, LocalR[i].AttributeList[count].attr_name);
                 strcpy(attr[count].attr_name, LocalR[i].AttributeList[count].value);
@@ -568,14 +570,14 @@ int zcs_get_attribs(char *name, zcs_attribute_t attr[], int *num)
 int zcs_listen_ad(char *name, zcs_cb_f cback){
     for (int i = 0; i < MAX_MSG_Size; i++)
     {
-        if (AdListenDict[i] != NULL && strcmp(AdListenDict[i].SName, name) == 0)
+        if (AdListenDict[i].SName != NULL && strcmp(AdListenDict[i].SName, name) == 0)
         {
             AdListenDict[i].callback = cback;
         }
-        else if (AdListenDict[i] == NULL)
+        else if (AdListenDict[i].SName == NULL)
         {
             AdListenDict[i].SName = name;
-            AdListenDict.callback = cback;
+            AdListenDict->callback = cback;
         }
     }
 };
