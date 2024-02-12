@@ -16,10 +16,11 @@ mcast_t *AppM;
 mcast_t *ServiceM;
 
 LocalRegistry *LocalR;
-
+AdCallbackListenDict *AdListenDict = NULL;
 pthread_mutex_t mutex = PTHREAD_COND_INITIALIZER;
 pthread_t ListenerThread;
 pthread_t HeartBeatGenerateThread;
+
 
 int AddNode(LocalRegistry r)
 {
@@ -424,7 +425,8 @@ int zcs_init(int type, char *MulticastConfig)
     if (type == ZCS_APP_TYPE)
     {
         LocalR = (LocalRegistry *)malloc(MAX_SERVICES * sizeof(LocalRegistry));
-        if (LocalR == NULL)
+        AdListenDict = (AdCallbackListenDict *)malloc(MAX_SERVICES * sizeof(AdCallbackListenDict));
+        if (LocalR == NULL || AdListenDict == NULL)
         {
             return -1;
         }
@@ -547,7 +549,18 @@ int zcs_get_attribs(char *name, zcs_attribute_t attr[], int *num)
 };
 
 int zcs_listen_ad(char *name, zcs_cb_f cback){
-    
+    for (int i = 0; i < MAX_MSG_Size; i++)
+    {
+        if (AdListenDict[i] != NULL && strcmp(AdListenDict[i].SName, name) == 0)
+        {
+            AdListenDict[i].callbackFunc = cback;
+        }
+        else if (d[i] == NULL)
+        {
+            d[i]. = name;
+            d[i].count = 1;
+        }
+    }
 };
 
 int zcs_shutdown()
