@@ -90,9 +90,11 @@ char* HeartBeatGenerate(char ServiceName[]) {
 }
 
 char* AdvertisementGenerate(char* AdName, char* AdVal) {
-    //AD#ServiceName
+    //AD#ServiceName#Adname;Adval
     char *ADMsg = (char *)malloc(MAX_MSG_Size);
     strcat(ADMsg, "AD#");
+    strcat(ADMsg, thisNode->serviceName);
+    strcat(ADMsg, "#");
     strcat(ADMsg,AdName);
     strcat(ADMsg,";");
     strcat(ADMsg,AdVal);
@@ -189,14 +191,17 @@ int messageType(char *msg){
     char* HeadLable = strtok_r(msg, "#",&msg);
     HeadLable[strlen(HeadLable) - 1] = '\0';
     msg[strlen(msg) - 1] = '\0';
-    if (strcmp(HeadLable,"HB")){
+    if (strcmp(HeadLable,"HB") == 0){
         return 1;
     }
-    else if (strcmp(HeadLable,"NOT")){
+    else if (strcmp(HeadLable,"NOT") == 0){
         return 2;
     }
-    else if (strcmp(HeadLable,"AD")){
+    else if (strcmp(HeadLable,"AD") == 0){
         return 3;
+    }
+    else if (strcmp(HeadLable,"DISCOVERAY") == 0){
+        return 20;
     }
     return 99;
     
@@ -208,7 +213,7 @@ void HeartbeatCount(dict *d, char *name){
             d[i].count++;
         }else if(d[i] == NULL){
             d[i].name = name;
-            d[i].count = 0;
+            d[i].count = 1;
         }
     }
 }
@@ -272,6 +277,11 @@ void *AppListenThread() {
             
             if (errCode == -1){
                 freenode(node);
+                //If Notfication is not considered heart beat, 
+                //thus very strict status of network is required, be should break
+                //break;
+
+
             }   // Otherwise continue
 
             HeartbeatCount(thread_table,node.serviceName);
@@ -288,18 +298,45 @@ void *AppListenThread() {
 }
 
 void *ServiceListenThread(){
-    while(1){
-        char* msg = (char *) malloc(MAX_MSG_Size);
-        multicast_setup_recv(AppM);
-        while (multicast_check_receive(ServiceM) == 0) {
-            // Spin
-            if (difftime(time(NULL), start_time) >= TIMEOUT){
+    //Service
+    while(1) {
+        
+        //receive
+        char msg [MAX_MSG_Size];
+        multicast_setup_recv(ServiceM);
+        while (multicast_check_receive(ServiceM) == 0) {   // Check if there's new msg
+            
+        }
+        multicast_receive(ServiceM,msg,MAX_MSG_Size);
+        
+        int msgtype = messageType(msg);
+
+        switch (msgtype)
+        {
+        case 20:         // Heartbeat
+            char node_name[MAX_NODE_NAME_SIZE] = HeartBeatDecode(msg);
+            HeartbeatCount(thread_table,node_name);
+            break;
+        case 2:         // Notification
+
+            LocalRegistry node = NotificationDecode(msg);
+            int errCode = AddNode(node);
+            
+            if (errCode == -1){
+                freenode(node);
+            }   // Otherwise continue
+
+            HeartbeatCount(thread_table,node.serviceName);
+            break;
+        default:
+            break;
+        }
+        if (difftime(time(NULL), start_time) >= TIMEOUT){
+            updateThreadTable(thread_table);
             restart_time = 1;
         }
-        }
-        multicast_receive(AppM,msg,MAX_MSG_Size)
-
     }
+    return ;
 }
 
 
@@ -397,9 +434,11 @@ int zcs_start(char *name, zcs_attribute_t attr[], int num){
     if(isInit == 0){return -1;}
     thisNode = initializeNode(name,attr,num);
     if(Nodetype == ZCS_APP_TYPE){      // APP
+
         pthread_create(&ListenerThread, NULL, AppListenThread, NULL); 
         DiscoveryGenerate();
     }else{                  // Service
+        SendMsg(AppM,NotificationGenerate(thisNode->serviceName,thisNode->AttributeList,thisNode->attr_num))
         pthread_create(&ListenerThread, NULL, ServiceListenThread, NULL); 
         pthread_create(&HeartBeatGenerateThread, NULL, HBSenderThread,NULL);
     }
