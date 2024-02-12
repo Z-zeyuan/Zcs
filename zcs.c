@@ -10,6 +10,7 @@ int AD_Send_Interval 0.1;
 int isInit = 0; // 0 for false, 1 for true
 char *LanIp;
 int Nodetype;
+int join_threads = 0;
 LocalRegistry *thisNode == NULL;
 
 mcast_t *AppM;
@@ -282,7 +283,7 @@ void *AppListenThread()
     double elapsed_time;
     int restart_time = 1;
     // in App
-    while (1)
+    while (join_threads == 0)
     {
         if (restart_time == 1)
         {
@@ -367,7 +368,7 @@ void *AppListenThread()
 void *ServiceListenThread()
 {
     // Service
-    while (1)
+    while (join_threads == 0)
     {
 
         // receive
@@ -396,7 +397,7 @@ void *ServiceListenThread()
 void *HBSenderThread()
 {
     // in App
-    while (1)
+    while (join_threads == 0)
     {
         sleep(0.01);
         char *HBmsg = HeartBeatGenerate(thisNode->serviceName);
@@ -590,14 +591,16 @@ int zcs_listen_ad(char *name, zcs_cb_f cback){
 
 int zcs_shutdown()
 {
+    if (isInit == 0) return -1;
+    int errCode;
+    join_threads = 1;
     if (Nodetype == ZCS_SERVICE_TYPE)
     {
-        // join all threads
+        errCode = pthread_join(HeartBeatGenerateThread,NULL);
+        if (errCode != 0) return -1;
     }
-    else
-    {
-        // join all threads
-    }
+    errCode = pthread_join(ListenerThread,NULL);
+    return errCode;
 };
 
 void zcs_log()
