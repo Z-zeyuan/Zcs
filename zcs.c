@@ -6,13 +6,13 @@
 #include "multicast.h"
 
 int AD_Post_Num = 5;
-int AD_Send_Interval = 0.1;
+float AD_Send_Interval = 0.1;
 
 int isInit = 0;                     // 0 for false, 1 for true
 char *LanIp;
 int Nodetype;
 int join_threads = 0;               // 0 for false, 1 for true
-LocalRegistry *thisNode == NULL;
+LocalRegistry *thisNode = NULL;
 
 mcast_t *AppM;                      
 mcast_t *ServiceM;
@@ -599,12 +599,12 @@ void zcs_log()
     printf("====== Log ======\n");
     for (int i = 0; i < MAX_SERVICES; i++)
     {
-        if (LocalR[i] != NULL)
+        if (LocalR[i].serviceName != NULL)
         {
             printf("Name: %s, State: %s, Attributes: ", LocalR[i].serviceName, LocalR[i].isAlive);
             for (int j = 0; j < LocalR[i].attr_num; j++)
             { // print all attributes of current node
-                if (LocalR[i].AttributeList[j] == NULL)
+                if (LocalR[i].AttributeList[j].attr_name == NULL)
                 {
                     printf("\n");
                     break;
