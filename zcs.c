@@ -133,6 +133,19 @@ void SendMsg(mcast_t Destination, char* msg) {
     return ;
 }
 
+
+
+void SendWaveMsg(mcast_t Destination, char* msg, float interval , int WaveSize) {
+    for (int i = 0; i < WaveSize; i++)
+    {
+        sleep(interval);
+        SendMsg(Destination, msg);
+    }
+    
+    
+    return ;
+}
+
 LocalRegistry NotificationDecode(char *NotMsg) {
     //"name#attname,attval;..."
     LocalRegistry Newnode =(LocalRegistry *)malloc(sizeof(LocalRegistry));
@@ -313,9 +326,9 @@ void *ServiceListenThread(){
 
         switch (msgtype)
         {
-        case 20:         // Heartbeat
-            char node_name[MAX_NODE_NAME_SIZE] = HeartBeatDecode(msg);
-            HeartbeatCount(thread_table,node_name);
+        case 20:         // Discovery
+            char *NotMsg = NotificationGenerate
+            SendWaveMsg(AppM,)
             break;
         case 2:         // Notification
 
@@ -394,7 +407,12 @@ int zcs_init(int type , char *MulticastConfig){
     {
         LocalR = (LocalRegistry *)malloc(MAX_SERVICES*sizeof(LocalRegistry));
         if(LocalR == NULL){return -1;}
+
+        
+        pthread_create(&ListenerThread, NULL, AppListenThread, NULL); 
+        DiscoveryGenerate();
         isInit = 1;
+
     }
     else if (type == ZCS_SERVICE_TYPE)
     {
@@ -433,14 +451,15 @@ LocalRegistry *initializeNode(const char *name, const zcs_attribute_t attr[], in
 int zcs_start(char *name, zcs_attribute_t attr[], int num){
     if(isInit == 0){return -1;}
     thisNode = initializeNode(name,attr,num);
-    if(Nodetype == ZCS_APP_TYPE){      // APP
-
-        pthread_create(&ListenerThread, NULL, AppListenThread, NULL); 
-        DiscoveryGenerate();
-    }else{                  // Service
-        SendMsg(AppM,NotificationGenerate(thisNode->serviceName,thisNode->AttributeList,thisNode->attr_num))
+    if(Nodetype == ZCS_SERVICE_TYPE)
+    {                  // Service
+        char *NOTMSG = NotificationGenerate(thisNode->serviceName,thisNode->AttributeList,thisNode->attr_num);
+        SendWaveMsg(AppM,NOTMSG,AD_Send_Interval,AD_Post_Num)
         pthread_create(&ListenerThread, NULL, ServiceListenThread, NULL); 
         pthread_create(&HeartBeatGenerateThread, NULL, HBSenderThread,NULL);
+    }else{      // APP
+
+        
     }
     
     return 0;
