@@ -6,10 +6,13 @@
 
 
 
+int AD_Post_Num 5;
+int AD_Send_Interval 0.1;
+
 int isInit = 0; // 0 for false, 1 for true
 char *LanIp ; 
 int Nodetype;
-LocalRegistry *thisNode;
+LocalRegistry *thisNode == NULL;
 
 
 mcast_t *AppM;
@@ -407,7 +410,19 @@ int zcs_start(char *name, zcs_attribute_t attr[], int num){
 
 
 int zcs_post_ad(char *ad_name, char *ad_value){
-    //post ad name and val 
+    if(thisNode == NULL){
+        return 0;
+    }
+    char *ADMessage = AdvertisementGenerate(ad_name,ad_value);
+    int SendCount=0;
+    for (int i = 0; i < AD_Post_Num; i++)
+    {
+
+        SendCount++;
+    }
+    
+
+    return AD_Post_Num;
 };
 
 int zcs_query(char *attr_name, char *attr_value, char *node_names[]){

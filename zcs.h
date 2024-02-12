@@ -29,9 +29,6 @@ typedef struct {
 #define TIMEOUT 1
 
 
-#define AD_POST_NUM 5
-#define AD_SEND_INTERVAL 1
-
 
 
 // Structure to hold service ID and its status
