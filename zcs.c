@@ -555,9 +555,9 @@ int zcs_listen_ad(char *name, zcs_cb_f cback){
         {
             AdListenDict[i].callbackFunc = cback;
         }
-        else if (d[i] == NULL)
+        else if (AdListenDict[i] == NULL)
         {
-            d[i]. = name;
+            AdListenDict[i]. = name;
             d[i].count = 1;
         }
     }

@@ -14,10 +14,10 @@ typedef struct {
     int count;
 } dict;
 
-struct AdCallbackListenDict {
+typedef struct {
     char *SName;
     zcs_cb_f callbackFunc;
-} ;
+} AdCallbackListenDict;
 
 #define MAX_SERVICES 100
 #define MAX_SERVICE_ATTRIBUTE 10
