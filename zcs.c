@@ -224,7 +224,7 @@ int messageType(char *msg)
     {
         return 3;
     }
-    else if (strcmp(HeadLable, "DISCOVERAY") == 0)
+    else if (strcmp(HeadLable, "DISCOVERY") == 0)
     {
         return 20;
     }
@@ -319,7 +319,7 @@ void *AppListenThread()
             {
                 freenode(node);
                 // If Notfication is not considered heart beat,
-                // thus very strict status of network is required, be should break
+                // thus very strict status of network is required, we should break
                 // break;
 
             } // Otherwise continue
@@ -356,7 +356,7 @@ void *ServiceListenThread()
 
         switch (msgtype)
         {
-        case 20: // Discovery
+        case 20: // DISCOVERY
             char *NOTMSG = NotificationGenerate(thisNode->serviceName, thisNode->AttributeList, thisNode->attr_num);
             SendWaveMsg(AppM, NOTMSG, AD_Send_Interval, AD_Post_Num);
             break;
@@ -428,9 +428,9 @@ int zcs_init(int type, char *MulticastConfig)
         {
             return -1;
         }
-
+        SendWaveMsg(ServiceM,"DISCOVERY#APP",AD_Send_Interval,AD_Post_Num);
         pthread_create(&ListenerThread, NULL, AppListenThread, NULL);
-        DiscoveryGenerate();
+        
         isInit = 1;
     }
     else if (type == ZCS_SERVICE_TYPE)
@@ -476,17 +476,18 @@ int zcs_start(char *name, zcs_attribute_t attr[], int num)
     {
         return -1;
     }
-    thisNode = initializeNode(name, attr, num);
+    
     if (Nodetype == ZCS_SERVICE_TYPE)
     { // Service
+        thisNode = initializeNode(name, attr, num);
         char *NOTMSG = NotificationGenerate(thisNode->serviceName, thisNode->AttributeList, thisNode->attr_num);
         SendWaveMsg(AppM, NOTMSG, AD_Send_Interval, AD_Post_Num);
         pthread_create(&ListenerThread, NULL, ServiceListenThread, NULL);
         pthread_create(&HeartBeatGenerateThread, NULL, HBSenderThread, NULL);
-        44
+        
     }
     else
-    { // APP
+    { // APP, may not need anything,won't hurt
     }
 
     return 0;
