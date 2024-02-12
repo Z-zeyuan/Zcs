@@ -4,6 +4,9 @@
 #define ZCS_APP_TYPE                1
 #define ZCS_SERVICE_TYPE            2
 
+typedef void (*zcs_cb_f)(char *, char *);
+
+
 typedef struct {
     char *attr_name;
     char *value;
@@ -16,7 +19,7 @@ typedef struct {
 
 typedef struct {
     char *SName;
-    zcs_cb_f callbackFunc;
+    zcs_cb_f callback;
 } AdCallbackListenDict;
 
 #define MAX_SERVICES 100
@@ -46,7 +49,6 @@ typedef struct {
 }LocalRegistry;
 
 
-typedef void (*zcs_cb_f)(char *, char *);
 
 int zcs_init(int type , char *MulticastConfig);
 int zcs_start(char *name, zcs_attribute_t attr[], int num);

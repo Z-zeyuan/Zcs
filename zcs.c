@@ -327,6 +327,31 @@ void *AppListenThread()
 
             HeartbeatCount(thread_table, node.serviceName);
             break;
+        case 3: // Notification
+            char *ADMsg_copy = (char *)malloc(MAX_MSG_Size);
+            strcpy(ADMsg_copy, msg);
+            char *buffer = (char *)malloc(100);
+            buffer = strtok_r(ADMsg_copy, "#", &ADMsg_copy);
+            buffer[strlen(buffer) - 1] = '\0';
+            ADMsg_copy[strlen(ADMsg_copy) - 1] = '\0';
+
+
+            for (int i = 0; i < MAX_MSG_Size; i++)
+            {
+                if (AdListenDict[i] != NULL && strcmp(AdListenDict[i].SName, buffer) == 0)
+                {
+                    char *AdName = (char *)malloc(200);
+                    AdName = strtok_r(ADMsg_copy, "#", &ADMsg_copy);
+                    AdName[strlen(buffer) - 1] = '\0';
+                    ADMsg_copy[strlen(ADMsg_copy) - 1] = '\0';
+                    char* AdVal = ADMsg_copy;
+                    AdListenDict.callback(AdName,AdVal);
+                }
+                else if (AdListenDict[i] == NULL)
+                {break;}
+            }
+
+
         default:
             break;
         }
@@ -553,12 +578,12 @@ int zcs_listen_ad(char *name, zcs_cb_f cback){
     {
         if (AdListenDict[i] != NULL && strcmp(AdListenDict[i].SName, name) == 0)
         {
-            AdListenDict[i].callbackFunc = cback;
+            AdListenDict[i].callback = cback;
         }
         else if (AdListenDict[i] == NULL)
         {
-            AdListenDict[i]. = name;
-            d[i].count = 1;
+            AdListenDict[i].SName = name;
+            AdListenDict.callback = cback;
         }
     }
 };
