@@ -1,618 +1,705 @@
-#include "zcs.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <pthread.h>
 #include <time.h>
-#include <string.h>
+#include <unistd.h>
+#include "zcs.h"
 #include "multicast.h"
 
-int AD_Post_Num = 5;
-//micro sec
-int AD_Send_Interval = 100000;
+// ========== Definitions ====================================================================================================
 
-int isInit = 0;                     // 0 for false, 1 for true
-char *LanIp;
+#define MAX_NODES 100               // Max number of nodes in local registry
+#define MAX_SERVICE_ATTRIBUTE 10    // Max number of attributes of a node
+#define MAX_CALLBACK_NUM 10         // Max CallBack function that a node can register
+#define MAX_MSG_LENGTH 1024        
+#define MAX_NODE_NAME_LENGTH 64 
+
+#define APP_SEND_PORT   4096
+#define SERVICE_SEND_PORT 5024
+#define DEFAULT_PORT 4004
+
+#define TIMEOUT 1
+
+// ========== Struct definitions ==========================================================================================
+
+typedef struct {
+    char *name;
+    int count;
+} HBCounter;
+
+typedef struct{
+    int count;
+    HBCounter counters[MAX_NODES];
+}HBDict;
+
+typedef struct {
+    char *SName;
+    zcs_cb_f callback;
+} CBDictEntry;   // Callback dict entry
+
+typedef struct {
+    int count;
+    CBDictEntry cbs[MAX_CALLBACK_NUM];
+}CBDict;
+
+// Structure to hold service ID and its status
+typedef struct {
+    char *name;                 
+    int isAlive;                    // Flag indicating whether it's alive
+    zcs_attribute_t *attributes;    // List of zcs_attribute_t structs
+    int attrnum;                    // Number of zcs_attribute_t structs in the list
+} Node;
+
+typedef struct {
+    Node nodes[MAX_NODES];
+    int num_nodes;
+} NodeList;
+
+// ========== Global Variables ====================================================================================================
+
+char *ip1A = "224.1.1.1";
+char *ip1S = "224.1.1.2";
+char *discovery = "D";
+
+int isInit = 0;
 int Nodetype;
-int join_threads = 0;               // 0 for false, 1 for true
-LocalRegistry *thisNode = NULL;
 
-mcast_t *AppM;                      
-mcast_t *ServiceM;
+mcast_t *App_Service_Send;
+mcast_t *App_Service_Receive;
+mcast_t *Service_App_Send;
+mcast_t *Service_App_Receive;
 
-LocalRegistry *LocalR;              // Pointer of local registry table
+NodeList LR;    // Local Registry
+CBDict cbd;     // CallBack function table
+HBDict hbd;     // Heartbeat Counter table
+Node thisnode; 
 
-AdCallbackListenDict *AdListenDict = NULL;
-pthread_mutex_t mutex = PTHREAD_COND_INITIALIZER;
+int join_threads = 0;
+pthread_mutex_t mutex;
 pthread_t ListenerThread;           
 pthread_t HeartBeatGenerateThread;
 
 
-/* Add a node to the local registry. Do nothing and return -1 if node exists. 
-    Return 0 if success. Return -2 if no available space.*/
-int AddNode(LocalRegistry r)
-{
+// ========== Struct helpers ==============================================================================================================
+
+
+/* Create a new Node*/
+void initializeNode(Node *node, const char *name, zcs_attribute_t attr[], int num) {
+    node->name = strdup(name);
+    node->isAlive = 0;
+    node->attrnum = (num < MAX_NODES) ? num : MAX_NODES;
+    node->attributes = malloc(num * sizeof(zcs_attribute_t));
+    if (node->attributes == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
+    for (int i = 0; i < node->attrnum; i++){
+        node->attributes[i] = attr[i];
+    }
+}
+
+void freeNode(Node *node) {
+    free(node->name);
+    for (int i = 0; i < node->attrnum; i++) {
+        free(node->attributes[i].attr_name);
+        free(node->attributes[i].value);
+    }
+    free(node->attributes);
+}
+
+void initializeNodeList(NodeList *list) {
+    list->num_nodes = 0;
+}
+
+int addNode(NodeList *list, Node node) {
     pthread_mutex_lock(&mutex);
-    for (int i = 0; i < MAX_SERVICES; i++)
-    {
-        if (LocalR != NULL && strcmp(LocalR[i].serviceName, r.serviceName) == 0)
-        {
+    // Check if a node with the same name already exists
+    for (int i = 0; i < list->num_nodes; i++) {
+        if (strcmp(list->nodes[i].name, node.name) == 0) {
             pthread_mutex_unlock(&mutex);
-            return -1; // Duplicate node name, reject
-        }
-        else if (LocalR == NULL)
-        {
-            LocalR[i] = r;
-            pthread_mutex_unlock(&mutex);
-            return 0; // Success
+            return -1; // Node with the same name already exists, do nothing
         }
     }
+    if (list->num_nodes >= MAX_NODES) {
+        fprintf(stderr, "Maximum number of nodes reached.\n");
+        pthread_mutex_unlock(&mutex);
+        return -2;
+    }  
+    // Add the node to the list
+    list->nodes[list->num_nodes++] = node;
+
     pthread_mutex_unlock(&mutex);
-    return -2; // FULL
+    return 0;
 }
 
-void freenode(LocalRegistry *Node)
-{
-    int attrlen = Node->attr_num;
-    for (int i = 0; i < attrlen; i++)
-    {
-        free(Node->AttributeList[i].attr_name);
-        free(Node->AttributeList[i].value);
-    }
-    free(Node);
+void initializeCBD(CBDict *dict){
+    dict->count = 0;
 }
 
-/*  Generate and return a HEARTBEAT message for the given node name. */
-char *HeartBeatGenerate(char ServiceName[])
-{
-    // HB#ServiceName
-    char *HBMsg = (char *)malloc(MAX_MSG_Size);
-    strcat(HBMsg, "HB#");
-    strcat(HBMsg, ServiceName);
-    return HBMsg;
-}
-
-/* Generate and return an advertisement message. */
-char *AdvertisementGenerate(char *AdName, char *AdVal)
-{
-    // AD#ServiceName#Adname;Adval
-    char *ADMsg = (char *)malloc(MAX_MSG_Size);
-    strcat(ADMsg, "AD#");
-    strcat(ADMsg, thisNode->serviceName);
-    strcat(ADMsg, "#");
-    strcat(ADMsg, AdName);
-    strcat(ADMsg, ";");
-    strcat(ADMsg, AdVal);
-    return ADMsg;
-}
-
-/* Generate a notification message.  */
-char *NotificationGenerate(char *ServiceName, zcs_attribute_t attr[], int num)
-{
-    //"NOT#name#attrnum#attname,attval;..."
-    char *NotMsg = (char *)malloc(MAX_MSG_Size);
-    strcat(NotMsg, "NOT#");
-    strcat(NotMsg, ServiceName);
-    strcat(NotMsg, "#");
-    char *numstring = (char *)malloc(2);
-    sprintf(numstring, "%d", num);
-    strcat(NotMsg, numstring);
-    strcat(NotMsg, "#");
-    for (int i = 0; i < num; i++)
-    {
-        char *Pair = (char *)malloc(75);
-        strcat(Pair, attr[i].attr_name);
-        strcat(Pair, ",");
-        strcat(Pair, attr[i].value);
-        strcat(Pair, ";");
-        strcat(NotMsg, Pair);
-        free(Pair);
-    }
-
-    NotMsg[strlen(NotMsg) -1] = '\0';
-    return NotMsg;
-}
-
-/* Send the message to the given multicast channel. */
-void SendMsg(mcast_t *Destination, char *msg)
-{
-    multicast_send(Destination, msg, strlen(msg));
-    return;
-}
-
-/* Send 'WaveSize' number of messages in 'interval' time to the given multicast channel*/
-int SendWaveMsg(mcast_t *Destination, char *msg, int interval, int WaveSize)
-{
-    int count = 0;
-    for (int i = 0; i < WaveSize; i++)
-    {
-        
-        usleep(interval);
-        SendMsg(Destination, msg);
-        count++;
-    }
-    free(msg);
-    return count;
-}
-
-/* Decode the given notification message, then generate and return a node */
-LocalRegistry* NotificationDecode(char *NotMsg)
-{
-    //"name#attname,attval;..."
-    LocalRegistry* Newnode = (LocalRegistry *)malloc(sizeof(LocalRegistry));
-    // char name[64];
-    char *NotMsg_copy = (char *)malloc(MAX_MSG_Size);
-    strcpy(NotMsg_copy, NotMsg);
-    char *buffer = (char *)malloc(100);
-    buffer = strtok_r(NotMsg_copy, "#", &NotMsg_copy);
-
-    buffer[strlen(buffer) - 1] = '\0';
-    NotMsg_copy[strlen(NotMsg_copy) - 1] = '\0';
-
-    strcpy(Newnode->serviceName, buffer);
-    buffer = strtok_r(NotMsg_copy, "#", &NotMsg_copy);
-
-    buffer[strlen(buffer) - 1] = '\0';
-    NotMsg_copy[strlen(NotMsg_copy) - 1] = '\0';
-
-    int num = atoi(buffer);
-    Newnode->attr_num = num;
-    Newnode->isAlive = 1;
-    // add node
-    buffer = strtok_r(NotMsg_copy, ";", &NotMsg_copy);
-    buffer[strlen(buffer) - 1] = '\0';
-    NotMsg_copy[strlen(NotMsg_copy) - 1] = '\0';
-
-    int i = 0;
-    while (buffer != NULL)
-    {
-
-        char *attrname = (char *)malloc(40);
-        char *attrval = (char *)malloc(30);
-        strcpy(attrname, strtok_r(buffer, ",", &buffer));
-        strcpy(attrval, buffer);
-
-        attrname[strlen(attrname) - 1] = '\0';
-        attrval[strlen(attrval) - 1] = '\0';
-
-        Newnode->AttributeList[i].attr_name = attrname;
-        Newnode->AttributeList[i].value = attrval;
-
-        buffer = strtok_r(NotMsg_copy, ";", &NotMsg_copy);
-        buffer[strlen(buffer) - 1] = '\0';
-        NotMsg_copy[strlen(NotMsg_copy) - 1] = '\0';
-        i++;
-    }
-
-    free(NotMsg);
-    free(buffer);
-    return Newnode;
-}
-
-/* Return an integer that represents the message type of the given message.
-    Return 1 if it's HEARTBEAT
-    Return 2 if it's Nofitication
-    Return 3 if it's Advertisement
-    Return 20 if it's Discovery
-    Return 99 otherwise. */
-int messageType(char *msg)
-{
-    char *HeadLable = strtok_r(msg, "#", &msg);
-    HeadLable[strlen(HeadLable) - 1] = '\0';
-    msg[strlen(msg) - 1] = '\0';
-    if (strcmp(HeadLable, "HB") == 0)
-    {
-        return 1;
-    }
-    else if (strcmp(HeadLable, "NOT") == 0)
-    {
-        return 2;
-    }
-    else if (strcmp(HeadLable, "AD") == 0)
-    {
-        return 3;
-    }
-    else if (strcmp(HeadLable, "DISCOVERY") == 0)
-    {
-        return 20;
-    }
-    return 99;
-}
-
-void HeartbeatCount(dict *d, char *name)
-{
-    for (int i = 0; i < MAX_MSG_Size; i++)
-    {
-        if (d[i].name != NULL && strcmp(d[i].name, name) == 0)
-        {
-            d[i].count++;
-        }
-        else if (d[i].name == NULL)
-        {
-            d[i].name = name;
-            d[i].count = 1;
+int findCallbackIndex(CBDict *dict, char *name) {
+    for (int i = 0; i < dict->count; i++) {
+        if (strcmp(dict->cbs[i].SName, name) == 0) {
+            return i; // Name found, return its index
         }
     }
+    return -1; // Name not found
 }
 
-void updateThreadTable(dict *d)
-{
-    pthread_mutex_unlock(&mutex);
-    for (int i = 0; i < MAX_SERVICES; i++)
-    {
-        if (d[i].name == NULL)
-        {
-            pthread_mutex_unlock(&mutex);
+void addCallBack(CBDict *dict, char *name, zcs_cb_f cb) {
+    if (dict->count >= MAX_CALLBACK_NUM) {
+        printf("addCallBack: Full\n");
+        return;
+    }
+
+    int index = findCallbackIndex(dict, name);
+    if (index != -1) {
+        printf("addCallBack: Name already exists\n");
+        return;
+    }
+
+    index = dict->count;
+    dict->cbs[index].SName = name;
+    dict->cbs[index].callback = cb;
+    dict->count++;
+}
+
+void printNode(Node *node){
+    if (node != NULL) {
+        printf("Node:\n");
+        printf("Name: %s\n", node->name);
+        printf("IsAlive: %d\n", node->isAlive);
+        printf("Attribute Count: %d\n", node->attrnum);
+        for (int i = 0; i < node->attrnum; i++) {
+            printf("Attribute %d: %s = %s\n", i+1, node->attributes[i].attr_name, node->attributes[i].value);
+        }
+    } else {
+        printf("Failed to print node.\n");
+    }
+}
+
+void initializeHBDict(HBDict *hbd){
+    hbd->count = 0;
+}
+
+void increaseHBCount(HBDict *hbd, char *name) {
+    // Check if the HBCounter with the given name exists
+    for (int i = 0; i < hbd->count; i++) {
+        if (strcmp(hbd->counters[i].name, name) == 0) {
+            // If found, increase its counter by 1
+            hbd->counters[i].count++;
             return;
         }
-        else
-        {
-            char *node_name = d[i].name;
-            int isAlive = (d[i].count >= 3) ? 1 : 0;
-            for (int j = 0; j < MAX_SERVICES; j++)
-            {
-                if (strcmp(LocalR[j].serviceName, node_name) == 0)
-                {
-                    LocalR[j].isAlive = isAlive;
+    }
+    // If not found, create a new HBCounter
+    if (hbd->count < MAX_NODES) {
+        hbd->counters[hbd->count].name = strdup(name); // Allocate memory for the name
+        hbd->counters[hbd->count].count = 1;
+        hbd->count++;
+    } else {
+        printf("Error: Maximum number of HBCounters reached.\n");
+    }
+}
+
+void updateLR(NodeList *lr, HBDict *hbd) {
+    pthread_mutex_lock(&mutex);
+    for (int i = 0; i < hbd->count; i++) {
+        HBCounter *counter = &hbd->counters[i];
+
+        // Find corresponding node in lr by name
+        for (int j = 0; j < lr->num_nodes; j++) {
+            Node *node = &lr->nodes[j];
+            if (strcmp(node->name, counter->name) == 0) {
+                // Update isAlive flag based on counter's count
+                if (counter->count > 3) {
+                    node->isAlive = 1;
+                } else {
+                    node->isAlive = 0;
                 }
+                break;  // No need to continue searching once found
             }
         }
     }
     pthread_mutex_unlock(&mutex);
-    return;
 }
 
-/* Thread function that listens all message for app. 
-    Once a msg is received, it decodes the msg and do different 
-    work, based on the type and the body of the msg. 
-    Thread terminates if zcs_shundown() is called. */
-void *AppListenThread()
-{
-    dict *thread_table = (dict *)malloc(MAX_SERVICES * sizeof(dict));
-    time_t start_time;
-    double elapsed_time;
-    int restart_time = 1;
-    // in App
-    while (join_threads == 0)
-    {
-        if (restart_time == 1)
-        {
-            restart_time = 0;
-            start_time = time(NULL);
-        }
-        // receive
-        char msg[MAX_MSG_Size];
-        multicast_setup_recv(ServiceM);
-        while (multicast_check_receive(ServiceM) == 0)
-        { // Check if there's new msg
-            // Spin
-            if (difftime(time(NULL), start_time) >= TIMEOUT)
-            {
-                updateThreadTable(thread_table);
-                restart_time = 1;
-            }
-        }
-        multicast_receive(ServiceM, msg, MAX_MSG_Size);
 
-        int msgtype = messageType(msg);
-
-        switch (msgtype)
-        {
-        case 1: // Heartbeat
-            char node_name[MAX_NODE_NAME_SIZE];
-            strcpy(node_name,msg);
-            HeartbeatCount(thread_table, node_name);
-            break;
-        case 2: // Notification
-
-            LocalRegistry* node = NotificationDecode(msg);
-            int errCode = AddNode(*node);
-
-            if (errCode == -1)
-            {
-                freenode(node);
-                break;
-            } // Otherwise continue
-
-            HeartbeatCount(thread_table, node->serviceName);
-            break;
-        case 3: // Advertisement
-            char *ADMsg_copy = (char *)malloc(MAX_MSG_Size);
-            strcpy(ADMsg_copy, msg);
-            char *buffer = (char *)malloc(100);
-            buffer = strtok_r(ADMsg_copy, "#", &ADMsg_copy);
-            buffer[strlen(buffer) - 1] = '\0';
-            ADMsg_copy[strlen(ADMsg_copy) - 1] = '\0';
+// ========== Message Encode & Decode ====================================================================================================
 
 
-            for (int i = 0; i < MAX_MSG_Size; i++)
-            {
-                if (AdListenDict[i].SName != NULL && strcmp(AdListenDict[i].SName, buffer) == 0)
-                {
-                    char *AdName = (char *)malloc(200);
-                    AdName = strtok_r(ADMsg_copy, ";", &ADMsg_copy);
-                    AdName[strlen(buffer) - 1] = '\0';
-                    ADMsg_copy[strlen(ADMsg_copy) - 1] = '\0';
-                    char* AdVal = ADMsg_copy;
-                    AdListenDict->callback(AdName,AdVal);
-                }
-                else if (AdListenDict[i].SName == NULL)
-                {break;}
-            }
-
-
+int getMsgType(char *str) {
+    char firstChar = str[0];
+    switch(firstChar) {
+        case 'D':
+            return 1;
+        case 'N':
+            return 2;
+        case 'H':
+            return 3;
+        case 'A':
+            return 4;
         default:
-            break;
-        }
-        if (difftime(time(NULL), start_time) >= TIMEOUT)
-        {
-            updateThreadTable(thread_table);
-            restart_time = 1;
-        }
-    }
-    return;
-}
-
-/* Thread function that listens all message for service. 
-    Once a msg is received, it decodes the msg and do different 
-    work, based on the type and the body of the msg. 
-    Thread terminates if zcs_shundown() is called. */
-void *ServiceListenThread()
-{
-    // Service
-    while (join_threads == 0)
-    {
-
-        // receive
-        char msg[MAX_MSG_Size];
-        multicast_setup_recv(ServiceM);
-        while (multicast_check_receive(ServiceM) == 0)
-        { // Check if there's new msg
-        }
-        multicast_receive(ServiceM, msg, MAX_MSG_Size);
-
-        int msgtype = messageType(msg);
-
-        switch (msgtype)
-        {
-        case 20: // DISCOVERY
-            char *NOTMSG = NotificationGenerate(thisNode->serviceName, thisNode->AttributeList, thisNode->attr_num);
-            SendWaveMsg(AppM, NOTMSG, AD_Send_Interval, AD_Post_Num);
-            break;
-        default:
-            break;
-        }
-    }
-    return;
-}
-
-/* Thread function that keeps sending HEARTBEAT msg. */
-void *HBSenderThread()
-{
-    // in App
-    char *HBmsg = HeartBeatGenerate(thisNode->serviceName);
-    while (join_threads == 0)
-    {
-        usleep(10000);
-        
-        SendMsg(AppM, HBmsg);
-    }
-}
-
-// char *getIP()
-// {
-//     char hostname[1024];
-//     struct hostent *host_entry;
-//     char *ip;
-
-//     // Get the hostname
-//     if (gethostname(hostname, sizeof(hostname)) == -1)
-//     {
-//         perror("gethostname");
-//         return 1;
-//     }
-
-//     // Get hostent structure for the hostname
-//     if ((host_entry = gethostbyname(hostname)) == NULL)
-//     {
-//         perror("gethostbyname");
-//         return 1;
-//     }
-
-//     // Convert the IP address to a string
-//     ip = inet_ntoa(*(struct in_addr *)host_entry->h_addr_list[0]);
-
-//     printf("Hostname: %s\n", hostname);
-//     printf("IP Address: %s\n", ip);
-
-//     return ip;
-// }
-
-int zcs_init(int type)
-{
-    // MulticastConfig = "ip#sport#rport"
-    AppM = multicast_init(LanIp, APPRPORT, APPSPORT);
-    ServiceM = multicast_init(LanIp, SERVICERPORT, SERVICESPORT);
-    if (AppM == NULL || ServiceM == NULL)
-    {
-        return -1;
-    }
-    if (type != ZCS_APP_TYPE && type != ZCS_SERVICE_TYPE)
-    {
-        return -1;
-    }
-
-
-    Nodetype = type;
-    if (type == ZCS_APP_TYPE)
-    {
-        LocalR = (LocalRegistry *)malloc(MAX_SERVICES * sizeof(LocalRegistry));
-        AdListenDict = (AdCallbackListenDict *)malloc(MAX_SERVICES * sizeof(AdCallbackListenDict));
-        if (LocalR == NULL || AdListenDict == NULL)
-        {
             return -1;
-        }
-        SendWaveMsg(ServiceM,"DISCOVERY#APP",AD_Send_Interval,AD_Post_Num);
-        pthread_create(&ListenerThread, NULL, AppListenThread, NULL);
-        
-        isInit = 1;
     }
-    else if (type == ZCS_SERVICE_TYPE)
-    {
-        isInit = 1;
-    }
-    return 0;
-};
+}
 
-LocalRegistry *initializeNode(const char *name, const zcs_attribute_t attr[], int num)
-{
-    // Allocate memory for Node
-    LocalRegistry *newNode = (LocalRegistry *)malloc(sizeof(LocalRegistry));
-    if (newNode == NULL)
-    {
-        // Error handling for memory allocation failure
-        fprintf(stderr, "Memory allocation failed for LocalRegistry\n");
+char *GenerateNotificationMsg(Node node) {
+    // Calculate the length of the output string
+    int length = snprintf(NULL, 0, "N#%s#%d#", node.name, node.attrnum);
+
+    // Calculate the length of attributes part of the string
+    for (int i = 0; i < node.attrnum; i++) {
+        length += snprintf(NULL, 0, "%s#%s#", node.attributes[i].attr_name, node.attributes[i].value);
+    }
+
+    // Allocate memory for the output string
+    char *msg = (char *)malloc(length + 1);
+    if (msg == NULL) {
+        // Memory allocation failed
         return NULL;
     }
 
-    // Copy serviceName
-    strncpy(newNode->serviceName, name, MAX_NODE_NAME_SIZE - 1);
-    newNode->serviceName[MAX_NODE_NAME_SIZE - 1] = '\0';
-
-    newNode->attr_num = num;
-
-    newNode->isAliveTimeCount = 0;
-    newNode->isAlive = 0;
-
-    // Copy AttributeList
-    for (int i = 0; i < num; i++)
-    {
-        newNode->AttributeList[i].attr_name = strdup(attr[i].attr_name);
-        newNode->AttributeList[i].value = strdup(attr[i].value);
+    // Generate the output string
+    int offset = sprintf(msg, "N#%s#%d#", node.name, node.attrnum);
+    for (int i = 0; i < node.attrnum; i++) {
+        offset += sprintf(msg + offset, "%s#%s#", node.attributes[i].attr_name, node.attributes[i].value);
     }
 
-    return newNode;
+    return msg;
 }
 
-int zcs_start(char *name, zcs_attribute_t attr[], int num)
-{
-    if (isInit == 0)
-    {
-        return -1;
+Node *DecodeNotificationMsg(char *msg) {
+    Node *node = malloc(sizeof(Node));
+    if (node == NULL) {
+        return NULL; // Memory allocation failed
     }
-    
-    if (Nodetype == ZCS_SERVICE_TYPE)
-    { // Service
-        thisNode = initializeNode(name, attr, num);
-        char *NOTMSG = NotificationGenerate(thisNode->serviceName, thisNode->AttributeList, thisNode->attr_num);
-        SendWaveMsg(AppM, NOTMSG, AD_Send_Interval, AD_Post_Num);
-        pthread_create(&ListenerThread, NULL, ServiceListenThread, NULL);
-        pthread_create(&HeartBeatGenerateThread, NULL, HBSenderThread, NULL);
-        
+
+    // Initialize attributes pointer to NULL to handle free if needed
+    node->attributes = NULL;
+
+    // Parsing the message, get the msg type
+    char *token = strtok(msg, "#");
+    if (token == NULL || strcmp(token, "N") != 0) {
+        free(node);
+        return NULL; // Invalid message format
     }
-    // Do nothing is it's APP_TYPE
+
+    // Extract node name
+    token = strtok(NULL, "#");
+    if (token == NULL || strlen(token) > MAX_NODE_NAME_LENGTH) {
+        free(node);
+        return NULL; // Invalid message format
+    }
+    node->name = strdup(token); // Duplicate the string since strtok modifies the input
+
+    // Extract attribute count
+    token = strtok(NULL, "#");
+    if (token == NULL) {
+        free(node->name);
+        free(node);
+        return NULL; // Invalid message format
+    }
+    node->attrnum = atoi(token);
+    if (node->attrnum < 0) {
+        free(node->name);
+        free(node);
+        return NULL; // Negative attribute count
+    }
+
+    // Allocate memory for attributes
+    node->attributes = malloc(node->attrnum * sizeof(zcs_attribute_t));
+    if (node->attributes == NULL) {
+        free(node->name);
+        free(node);
+        return NULL; // Memory allocation failed
+    }
+
+    // Extract attributes
+    for (int i = 0; i < node->attrnum; i++) {
+        token = strtok(NULL, "#"); // Attribute name
+        if (token == NULL) {
+            free(node->name);
+            free(node->attributes);
+            free(node);
+            return NULL; // Invalid message format
+        }
+        node->attributes[i].attr_name = strdup(token);
+
+        token = strtok(NULL, "#"); // Attribute value
+        if (token == NULL) {
+            free(node->name);
+            for (int j = 0; j < i; j++) {
+                free(node->attributes[j].attr_name);
+            }
+            free(node->attributes);
+            free(node);
+            return NULL; // Invalid message format
+        }
+        node->attributes[i].value = strdup(token);
+    }
+
+    //  isAlive is 0 by default
+    node->isAlive = 0;
+
+    return node;
+}
+
+char *DecodeHeartBeatMSG(char *msg){
+    char *token = strtok(msg, "#");
+    // If token is not NULL, return the next token (which is the name)
+    if (token != NULL) {
+        token = strtok(NULL, "#"); // Get the next token after '#'
+        return token;
+    }
+    return NULL; // Return NULL if no token is found
+}
+
+char *GenerateAdvertisementMSG(char *node_name, char *ad_name, char *ad_value) {
+    // Calculate the length of the resulting string
+    size_t len = strlen("A#") + strlen(node_name) + strlen(ad_name) + strlen(ad_value) + 3; // +3 for "#" separators and null terminator
+
+    // Allocate memory for the resulting string
+    char *msg = (char *)malloc(len * sizeof(char));
+    if (msg == NULL) {
+        fprintf(stderr, "Memory allocation failed.\n");
+        return NULL; // Return NULL if memory allocation fails
+    }
+
+    // Format the output string
+    snprintf(msg, len, "A#%s#%s#%s", node_name, ad_name, ad_value);
+
+    return msg;
+}
+
+void ProcessAdvertisementMSG(char *msg){
+    char *token = strtok(msg, "#");
+    if (token == NULL || strcmp(token, "A") != 0) {
+        printf("Invalid message format.\n");
+        return;
+    }
+
+    token = strtok(NULL, "#");
+    if (token == NULL) {
+        printf("Node name not found.\n");
+        return;
+    }
+    char nodeName[MAX_NODE_NAME_LENGTH];
+    strncpy(nodeName, token, MAX_NODE_NAME_LENGTH - 1);
+    nodeName[MAX_NODE_NAME_LENGTH - 1] = '\0';
+
+    token = strtok(NULL, "#");
+    if (token == NULL) {
+        printf("AdName not found.\n");
+        return;
+    }
+    char adName[100];
+    strncpy(adName, token, sizeof(adName) - 1);
+    adName[sizeof(adName) - 1] = '\0';
+
+    token = strtok(NULL, "#");
+    if (token == NULL) {
+        printf("AdValue not found.\n");
+        return;
+    }
+    char adValue[100];
+    strncpy(adValue, token, sizeof(adValue) - 1);
+    adValue[sizeof(adValue) - 1] = '\0';
+
+    int index = findCallbackIndex(&cbd, nodeName);
+
+    if (index == -1) {
+        printf("CBDictEntry for node '%s' not found.\n", nodeName);
+        return;
+    }
+
+    cbd.cbs[index].callback(adName, adValue);
+
+}
+
+// ========== Multicast functions ==============================================================================================================
+
+/* Send msg to channel 'wave' times. */
+void send_msg(mcast_t *channel, void *msg, int msglen, int wave){
+    for (int i = 0; i < wave; i++){
+        int err = multicast_send(channel,msg,msglen);
+        //printf("Message Send: %d\n",err);
+        usleep(10000);
+    }
+}
+
+
+// ========== Thread functions ==============================================================================================================
+
+void *AppListener(){
+    // === Initialization ===
+    initializeHBDict(&hbd);
+    time_t start_time;
+    int reset_time = 1;
+    multicast_setup_recv(App_Service_Receive);
+    char msg[MAX_MSG_LENGTH];
+    while(join_threads == 0){
+        // === Try to receive message ===
+        if (reset_time == 1){
+            reset_time = 0;
+            start_time = time(NULL);
+        }
+        //printf("AppListener is alive...\n");
+        memset(msg,'\0',sizeof(msg));
+        while(multicast_check_receive(App_Service_Receive) == 0){
+            //printf("App is waiting for message...\n");
+            if (difftime(time(NULL),start_time) > TIMEOUT){
+                updateLR(&LR,&hbd);
+                zcs_log();
+                reset_time = 1;
+            }
+        }
+        multicast_receive(App_Service_Receive,msg,MAX_MSG_LENGTH);
+        //printf("Services's new msg: %s\n",msg);
+        // === Process message ===
+        int msgtype = getMsgType(&msg);
+        switch (msgtype)
+        {
+        case 2:     // Notification
+            // Get the node and add it to LR
+            int errcode = -1;
+            Node *node = DecodeNotificationMsg(&msg);
+            if (node != NULL) errcode = addNode(&LR,*node);
+            if (errcode == 0) {
+                increaseHBCount(&hbd,node->name);
+                zcs_log();
+            }
+            break;
+        case 3:     // HeartBeat
+            // Get service name and increase HBCounter in HBDict
+            increaseHBCount(&hbd,DecodeHeartBeatMSG(&msg));
+            break;
+        case 4: // Advertisement
+            ProcessAdvertisementMSG(msg); 
+            break;
+        default:
+            break;
+        }
+        if (difftime(time(NULL),start_time) > TIMEOUT){
+                updateLR(&LR,&hbd);
+                zcs_log();
+                reset_time = 1;
+        }
+    }
+}
+
+void *ServiceListener(){
+    multicast_setup_recv(Service_App_Receive);
+    char msg[MAX_MSG_LENGTH];
+    while(join_threads == 0){
+        //printf("ServiceListener is alive...\n");
+        memset(msg,'\0',sizeof(msg));
+        while(multicast_check_receive(Service_App_Receive) == 0){
+            //printf("Service is waiting for message...\n");
+        }
+        multicast_receive(Service_App_Receive,msg,MAX_MSG_LENGTH);
+        printf("App's new msg: %s\n",msg);
+        int msgtype = getMsgType(&msg);
+        if(msgtype == 1){   // Discovery Message
+            char *notMsg = GenerateNotificationMsg(thisnode);
+            send_msg(Service_App_Send,notMsg,strlen(notMsg),1);
+        }
+    }
+}
+
+void *HeartBeatGenerator(){
+    char HBmsg[100];
+    sprintf(HBmsg,"H#%s",thisnode.name);
+    while(join_threads == 0){
+        //printf("HeartBeatGenerator is alive...\n");
+        send_msg(Service_App_Send,&HBmsg,strlen(HBmsg),1);
+        usleep(10000);
+    }
+}
+
+// ========== Main features ==========
+
+/*  Initializes the ZCS library. 
+    The input 'type' indicates whether an app or service is being initialized. 
+    Return 0 if the initialization was a success. 
+    Return -1 otherwise.
+*/
+int zcs_init(int type){
+    if (type != ZCS_APP_TYPE && type != ZCS_SERVICE_TYPE) return -1;    // Incorrect input value
+    Nodetype = type;
+
+    if(Nodetype == ZCS_APP_TYPE){
+        // Initialize Local Registry Table for App
+        initializeNodeList(&LR);
+        // Initialize CallBack Table
+        initializeCBD(&cbd);
+        // Initialize multicast channels
+        App_Service_Send = multicast_init(ip1A,APP_SEND_PORT,DEFAULT_PORT);
+        App_Service_Receive = multicast_init(ip1S,DEFAULT_PORT,SERVICE_SEND_PORT);
+        // Create Listener thread
+        pthread_create(&ListenerThread,NULL,AppListener,NULL);
+        // Send Discovery Msg
+        send_msg(App_Service_Send,discovery,strlen(discovery),1);
+        isInit = 1;
+    }else{
+        // Initialize multicast channels for Service
+        Service_App_Send = multicast_init(ip1S,SERVICE_SEND_PORT,DEFAULT_PORT);
+        Service_App_Receive = multicast_init(ip1A,DEFAULT_PORT,APP_SEND_PORT);
+        isInit = 1;
+    }
 
     return 0;
 }
 
-int zcs_post_ad(char *ad_name, char *ad_value)
-{
-    if (thisNode == NULL)
-    {
-        //error, this is app/ not start
-        return -2;
+/*  Puts a node online. (Supposed to be called by Service type Node)
+    'name' must be an ASCII string without spaces that is NULL terminated, and its max length is 64.
+    The attributes are specified as key-value pairs and would remain unchanged until the node shuts down.
+    'num' specifies the number of attributes passed into the node.
+    Retrun 0 if the node start was a success.
+    Return -1 otherwise.
+*/
+int zcs_start(char *name, zcs_attribute_t attr[], int num){
+    if (isInit == 0) return -1;
+
+    if (Nodetype == ZCS_SERVICE_TYPE){
+        // Create a node for myself
+        initializeNode(&thisnode,name,attr,num);
+        //printNode(&thisnode);
+        // Create a notification message based on myself
+        char *msg = GenerateNotificationMsg(thisnode);
+        //printf("Notification msg: %s\n",msg);
+        // Initialize threads and send notification message
+        pthread_create(&ListenerThread,NULL,ServiceListener,NULL);
+        send_msg(Service_App_Send,msg,strlen(msg),1);
+        pthread_create(&HeartBeatGenerateThread,NULL,HeartBeatGenerator,NULL);
     }
-    char *ADMessage = AdvertisementGenerate(ad_name, ad_value);
-    int c = SendWaveMsg(AppM,ADMessage,AD_Send_Interval,AD_Post_Num);
+    return 0;
+}
+/*  This function broadcast an advertisement message with the given name and value to all app nodes.
+    Return -1 if ZCS Library is not initialized or the function is not called by a service node.
+    Return number of times the advertisement was posted on the network.
+*/
+int zcs_post_ad(char *ad_name, char *ad_value){
+    if(isInit == 0 || Nodetype != ZCS_SERVICE_TYPE) return -1;
+    char *msg = GenerateAdvertisementMSG(thisnode.name,ad_name,ad_value);
+    int count = 5;
+    send_msg(Service_App_Send,msg,strlen(msg),count);
+    return count;
+}
 
-    return c;
-};
+/*  This function is used to scan for nodes with a given value for a given attribute.
+    The names of the nodes found are stored in the node_names, with a max size of "num".
+    Return x where x is number of nodes found.
+*/
+int zcs_query(char *attr_name, char *attr_value, char *node_names[], int num){
+    if (isInit == 0 || &LR == NULL) return 0;
 
-int zcs_query(char *attr_name, char *attr_value, char *node_names[], int namelen)
-{
     int count = 0;
-    for (int i = 0; i < MAX_SERVICES; i++)
-    {
-        if (LocalR[i].serviceName != NULL)
-        {
-            for (int j = 0; j < MAX_SERVICE_ATTRIBUTE; j++)
-            {
-                if (strcmp(attr_name, LocalR[i].AttributeList[j].attr_name) == 0 &&
-                    strcmp(attr_value, LocalR[i].AttributeList[j].value) == 0)
-                {
-                    strcpy(node_names[count++], LocalR[i].serviceName);
-                }
+    for (int i = 0; i < LR.num_nodes; i++){
+        if (count >= num) break;
+        for (int j = 0; j < LR.nodes[i].attrnum; j++){
+            if (strcmp(LR.nodes[i].attributes[j].attr_name,attr_name) == 0 && 
+                strcmp(LR.nodes[i].attributes[j].attr_name,attr_value) == 0){
+                if (count < num) {
+                    // Copy the node name to the node_names array
+                    strncpy(node_names[count], LR.nodes[i].name, MAX_NODE_NAME_LENGTH - 1);
+                    node_names[count][MAX_NODE_NAME_LENGTH - 1] = '\0'; // Null-terminate the string
+                    count++;
+                    break;
+                }  
             }
         }
     }
     return count;
-};
+}
 
-int zcs_get_attribs(char *name, zcs_attribute_t attr[], int *num)
-{
-    pthread_mutex_lock(&mutex);
-    for (int i = 0; i < MAX_SERVICES; i++)
-    {
-        if (LocalR[i].serviceName != NULL && strcmp(LocalR[i].serviceName, name) == 0)
-        {
-            for (int count = 0; count < *num; count++)
-            {
-                strcpy(attr[count].attr_name, LocalR[i].AttributeList[count].attr_name);
-                strcpy(attr[count].attr_name, LocalR[i].AttributeList[count].value);
-                pthread_mutex_unlock(&mutex);
-                return 0;
+/*  This function is used to get the full list of attributes of a node.
+    The first argument is the name of the node.
+    The second argument is an attribute array that is already allocated.
+    The third argument is set to the number of slots allocated in the attribute array. The function sets it to the number of actual attributes read from the node.
+    Return 0 if there's no error.
+    Return -1 if error occurs.
+*/
+int zcs_get_attribs(char *name, zcs_attribute_t attr[], int *num){
+    int node_index = -1;
+    // Find the index of the node with the given name
+    for (int i = 0; i < LR.num_nodes; i++) {
+        if (strcmp(LR.nodes[i].name, name) == 0) {
+            node_index = i;
+            break;
+        }
+    }
+
+    if (node_index == -1) {
+        printf("Node '%s' not found.\n", name);
+        return -1; // Return -1 if the node is not found
+    }
+
+    // Copy attributes to the provided attribute array
+    int count = 0;
+    for (int i = 0; i < LR.nodes[node_index].attrnum; i++) {
+        // Allocate memory for the key and value strings
+        attr[count].attr_name = malloc(strlen(LR.nodes[node_index].attributes[i].attr_name) + 1);
+        attr[count].value = malloc(strlen(LR.nodes[node_index].attributes[i].value) + 1);
+        if (attr[count].attr_name == NULL || attr[count].value == NULL) {
+            // Memory allocation failed, free previously allocated memory
+            for (int j = 0; j < count; j++) {
+                free(attr[j].attr_name);
+                free(attr[j].value);
             }
+            return -1; // Return -1 if memory allocation fails
         }
+        // Copy key and value strings
+        strcpy(attr[count].attr_name, LR.nodes[node_index].attributes[i].attr_name);
+        strcpy(attr[count].value, LR.nodes[node_index].attributes[i].value);
+        count++;
     }
-    pthread_mutex_unlock(&mutex);
-    return -1;
-};
 
+    // Update the number of actual attributes read
+    *num = count;
+    return 0;
+}
+
+/*  This function takes two arguments. 
+    The first is a name of the target node and the second is the callback that will be triggered when the target posts an advertisement. 
+    The callback has two arguments: name of the advertisement and the value of the advertisement.
+*/
 int zcs_listen_ad(char *name, zcs_cb_f cback){
-    for (int i = 0; i < MAX_MSG_Size; i++)
-    {
-        if (AdListenDict[i].SName != NULL && strcmp(AdListenDict[i].SName, name) == 0)
-        {
-            AdListenDict[i].callback = cback;
-        }
-        else if (AdListenDict[i].SName == NULL)
-        {
-            AdListenDict[i].SName = name;
-            AdListenDict->callback = cback;
-        }
-    }
-};
+    addCallBack(&cbd,name,cback);
+}
 
-int zcs_shutdown()
-{
-    if (isInit == 0 || thisNode == NULL) return -1;
+/*  This function is called to terminate the activities of the ZCS by a program before it terminates.
+    Return 0 if success.
+    Return -1 if error occurs.
+*/
+int zcs_shutdown(){
+    if (isInit == 0) return -1;
     int errCode;
     join_threads = 1;
     if (Nodetype == ZCS_SERVICE_TYPE)
     {
         errCode = pthread_join(HeartBeatGenerateThread,NULL);
-        if (errCode != 0) return -1;
+        if (errCode != 0) return errCode;
     }
     errCode = pthread_join(ListenerThread,NULL);
     return errCode;
-};
+}
 
-void zcs_log()
-{
-    printf("====== Log ======\n");
-    for (int i = 0; i < MAX_SERVICES; i++)
-    {
-        if (LocalR[i].serviceName != NULL)
-        {
-            printf("Name: %s, State: %s, Attributes: ", LocalR[i].serviceName, LocalR[i].isAlive);
-            for (int j = 0; j < LocalR[i].attr_num; j++)
-            { // print all attributes of current node
-                if (LocalR[i].AttributeList[j].attr_name == NULL)
-                {
-                    printf("\n");
-                    break;
-                }
-                printf("(%s,%s), ", LocalR[i].AttributeList[j].attr_name, LocalR[i].AttributeList[j].value);
-            }
+void zcs_log(){
+    if (&LR == NULL) return;
+    pthread_mutex_lock(&mutex);
+    printf("NodeList Information:\n");
+    printf("Number of nodes: %d\n", LR.num_nodes);
+    
+    for (int i = 0; i < LR.num_nodes; i++) {
+        printf("Node %d:\t", i + 1);
+        printf("Name: %s\t", LR.nodes[i].name);
+        printf("isAlive: %d\t", LR.nodes[i].isAlive);
+        printf("attrnum: %d\n",LR.nodes[i].attrnum);
+        printf("Attributes:\n");
+        for (int j = 0; j < LR.nodes[i].attrnum; j++) {
+            printf("(%s: %s);", LR.nodes[i].attributes[j].attr_name, LR.nodes[i].attributes[j].value);
         }
+        printf("\n");
     }
-};
+    pthread_mutex_unlock(&mutex);
+}

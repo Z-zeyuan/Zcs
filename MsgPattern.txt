@@ -1,0 +1,11 @@
+Discovery:
+D
+
+Nofitication:
+N#name#attnum#a1#a2#b1#b2...
+
+Heartbeat:
+H#name
+
+Advertisement:
+A#node_name#value1#value2
