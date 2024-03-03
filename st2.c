@@ -4,7 +4,7 @@
 
 int main(){
     // Service node test 
-    
+    sleep(10);
     zcs_attribute_t attribs[] = {
 	    { .attr_name = "type", .value = "speaker"},
 	    { .attr_name = "location", .value = "home"},
@@ -13,6 +13,6 @@ int main(){
     int a = zcs_init(ZCS_SERVICE_TYPE);
     int b = zcs_start("speaker-2", attribs, sizeof(attribs)/sizeof(zcs_attribute_t));
     //printf("st: a = %d, b = %d\n",a,b);
-    sleep(15);
+    sleep(60);
     return 0;
 }

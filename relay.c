@@ -172,7 +172,19 @@ int relay_init(){
     return 0;
 }
 
-int relay_up(int type){
+// void SetupSockets(){
+//     for (int i = 0; i < 2; i++)
+//     {
+//         RelayTable[i].sockets[0]=
+//         RelayTable[i].sockets[1]=
+//         RelayTable[i].sockets[2]=
+//         RelayTable[i].sockets[3]=
+//     }
+// }
+
+int relay_up(){
+    
+    
     
     return 0;
 }

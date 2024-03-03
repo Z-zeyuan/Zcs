@@ -216,6 +216,7 @@ void updateLR(NodeList *lr, HBDict *hbd) {
                 } else {
                     node->isAlive = 0;
                 }
+                counter->count = 0;
                 break;  // No need to continue searching once found
             }
         }
@@ -449,7 +450,7 @@ void *AppListener(){
             //printf("App is waiting for message...\n");
             if (difftime(time(NULL),start_time) > TIMEOUT){
                 updateLR(&LR,&hbd);
-                zcs_log();
+                //zcs_log();
                 reset_time = 1;
             }
         }
@@ -466,7 +467,7 @@ void *AppListener(){
             if (node != NULL) errcode = addNode(&LR,*node);
             if (errcode == 0) {
                 increaseHBCount(&hbd,node->name);
-                zcs_log();
+                //zcs_log();
             }
             break;
         case 3:     // HeartBeat
@@ -481,7 +482,7 @@ void *AppListener(){
         }
         if (difftime(time(NULL),start_time) > TIMEOUT){
                 updateLR(&LR,&hbd);
-                zcs_log();
+                //zcs_log();
                 reset_time = 1;
         }
     }
@@ -591,8 +592,10 @@ int zcs_post_ad(char *ad_name, char *ad_value){
     Return x where x is number of nodes found.
 */
 int zcs_query(char *attr_name, char *attr_value, char *node_names[], int num){
+    zcs_log();
     if (isInit == 0 || &LR == NULL) return 0;
-
+    printf(attr_name);
+    printf(attr_value);
     int count = 0;
     for (int i = 0; i < LR.num_nodes; i++){
         if (count >= num) break;
@@ -609,6 +612,7 @@ int zcs_query(char *attr_name, char *attr_value, char *node_names[], int num){
             }
         }
     }
+    printf(node_names[0]);
     return count;
 }
 
