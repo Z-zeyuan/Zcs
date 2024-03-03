@@ -9,7 +9,8 @@ COPY . .
 
 # Install any dependencies or required packages
 # If you need specific command line tools, install them here
-RUN gcc st.c zcs.c multicast.c -o servicetest && \
+RUN gcc st1.c zcs.c multicast.c -o servicetest1 && \
+    gcc st2.c zcs.c multicast.c -o servicetest2 && \
     gcc at.c zcs.c multicast.c -o apptest && \
     gcc send_test.c multicast.c -o send_test && \
     gcc receiver.c multicast.c -o receive_test
