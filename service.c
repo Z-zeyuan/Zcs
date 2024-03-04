@@ -9,7 +9,7 @@ int main() {
 	    { .attr_name = "location", .value = "kitchen"},
 	    { .attr_name = "make", .value = "yamaha"} };
     rv = zcs_start("speaker-X", attribs, sizeof(attribs)/sizeof(zcs_attribute_t));
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < 30; i++) {
         rv = zcs_post_ad("mute", "on");
         sleep(5);
         rv = zcs_post_ad("mute", "off");
