@@ -8,13 +8,13 @@ services:
     container_name: service1
     command: ["./servicetest1"]
     # Add other configurations like ports, volumes, etc. if needed
-  # service2:
-  #     build:
-  #       context: .
-  #       dockerfile: Dockerfile
-  #     container_name: service2
-  #     command: ["./servicetest2"]
-  #     # Add other configurations like ports, volumes, etc. if needed
+  service2:
+      build:
+        context: .
+        dockerfile: Dockerfile
+      container_name: service2
+      command: ["./servicetest2"]
+      # Add other configurations like ports, volumes, etc. if needed
   app:
     build:
       context: .

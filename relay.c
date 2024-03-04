@@ -7,7 +7,7 @@
 #include "multicast.h"
 
 
-#define MAX_RALEY_WIDTH 100               // Max number of nodes in local registry
+#define MAX_RALEY_WIDTH 2               // Max number of nodes in local registry
 #define MAX_SERVICE_ATTRIBUTE 10    // Max number of attributes of a node
 #define MAX_CALLBACK_NUM 10         // Max CallBack function that a node can register
 #define MAX_MSG_LENGTH 1024        
@@ -157,13 +157,13 @@ void *Lan2ServiceListener(){
 
 
 int relay_init(){
-    //Lan A channel
+    //Lan 1 channel
     Lan1_App_Service_Receive = multicast_init(ip1S,DEFAULT_PORT,SERVICE_SEND_PORT);
     Lan1_App_Service_Send = multicast_init(ip1A,APP_SEND_PORT,DEFAULT_PORT);
     Lan1_Service_App_Receive = multicast_init(ip1A,DEFAULT_PORT,APP_SEND_PORT);
     Lan1_Service_App_Send = multicast_init(ip1S,SERVICE_SEND_PORT,DEFAULT_PORT);
 
-    //Lan A channel
+    //Lan 2 channel
     Lan2_App_Service_Receive = multicast_init(ip2S,DEFAULT_PORT,SERVICE_SEND_PORT);
     Lan2_App_Service_Send = multicast_init(ip2S,APP_SEND_PORT,DEFAULT_PORT);
     Lan2_Service_App_Receive = multicast_init(ip2S,DEFAULT_PORT,APP_SEND_PORT);
@@ -183,15 +183,24 @@ int relay_init(){
 // }
 
 int relay_up(){
+    // for (int i = 0; i < 2; i++)
+    // {
     
+    //     pthread_create(&ListenerThread,NULL,AppListener,NULL);
+    //     pthread_create(&ListenerThread,NULL,AppListener,NULL);
+    // }
     
+    pthread_create(&Lan1AppListenerThread,NULL,Lan1AppListener,NULL);
+    pthread_create(&Lan1ServiceListenerThread,NULL,Lan1ServiceListener,NULL);
+    pthread_create(&Lan2AppListenerThread,NULL,Lan2AppListener,NULL);
+    pthread_create(&Lan2ServiceListenerThread,NULL,Lan2ServiceListener,NULL);
     
     return 0;
 }
 
 
 int relay_down(int type){
-    
+    join_threads=1;
 
     return 0;
 }

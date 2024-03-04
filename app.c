@@ -15,14 +15,14 @@ int main() {
     sleep(5);
     rv = zcs_query("type", "speaker", names, 10);
     sleep(5);
-    printf("%d\n",rv);
+    //printf("%d\n",rv);
     if (rv > 0) {
-        printf("11111\n");
+        printf("qurey good\n");
         zcs_attribute_t attrs[5];
-	int anum = 5;
+	    int anum = 5;
         rv = zcs_get_attribs(names[0], attrs, &anum);
-        if ((strcmp(attrs[0].attr_name, "location") == 0) &&
-            (strcmp(attrs[0].value, "kitchen") == 0)) {
+        if ((strcmp(attrs[1].attr_name, "location") == 0) &&
+            (strcmp(attrs[1].value, "kitchen") == 0)) {
                 printf("11111\n");
                 rv = zcs_listen_ad(names[0], hello);
         }

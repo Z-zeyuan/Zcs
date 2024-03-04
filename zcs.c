@@ -592,27 +592,29 @@ int zcs_post_ad(char *ad_name, char *ad_value){
     Return x where x is number of nodes found.
 */
 int zcs_query(char *attr_name, char *attr_value, char *node_names[], int num){
-    zcs_log();
     if (isInit == 0 || &LR == NULL) return 0;
-    printf(attr_name);
-    printf(attr_value);
+    //printf(attr_name);
+    //printf(attr_value);
     int count = 0;
     for (int i = 0; i < LR.num_nodes; i++){
         if (count >= num) break;
         for (int j = 0; j < LR.nodes[i].attrnum; j++){
             if (strcmp(LR.nodes[i].attributes[j].attr_name,attr_name) == 0 && 
-                strcmp(LR.nodes[i].attributes[j].attr_name,attr_value) == 0){
+                strcmp(LR.nodes[i].attributes[j].value,attr_value) == 0){
                 if (count < num) {
                     // Copy the node name to the node_names array
-                    strncpy(node_names[count], LR.nodes[i].name, MAX_NODE_NAME_LENGTH - 1);
-                    node_names[count][MAX_NODE_NAME_LENGTH - 1] = '\0'; // Null-terminate the string
+                    node_names[count] = (char *)malloc(MAX_NODE_NAME_LENGTH);
+                    memset(node_names[count],'\0',sizeof(node_names[count]));
+
+                    strcpy(node_names[count], LR.nodes[i].name);
+                    //node_names[count][MAX_NODE_NAME_LENGTH - 1] = '\0'; // Null-terminate the string
                     count++;
                     break;
                 }  
             }
         }
     }
-    printf(node_names[0]);
+    printf("%s\n",node_names[0]);
     return count;
 }
 
@@ -625,14 +627,16 @@ int zcs_query(char *attr_name, char *attr_value, char *node_names[], int num){
 */
 int zcs_get_attribs(char *name, zcs_attribute_t attr[], int *num){
     int node_index = -1;
+    //printf("%s\n",name);
     // Find the index of the node with the given name
     for (int i = 0; i < LR.num_nodes; i++) {
         if (strcmp(LR.nodes[i].name, name) == 0) {
             node_index = i;
+            //printf("Node Found\n");
             break;
         }
     }
-
+    
     if (node_index == -1) {
         printf("Node '%s' not found.\n", name);
         return -1; // Return -1 if the node is not found
@@ -643,7 +647,9 @@ int zcs_get_attribs(char *name, zcs_attribute_t attr[], int *num){
     for (int i = 0; i < LR.nodes[node_index].attrnum; i++) {
         // Allocate memory for the key and value strings
         attr[count].attr_name = malloc(strlen(LR.nodes[node_index].attributes[i].attr_name) + 1);
+        //memset(attr[count].attr_name,'\0',sizeof(attr[count].attr_name));
         attr[count].value = malloc(strlen(LR.nodes[node_index].attributes[i].value) + 1);
+        //memset(attr[count].value,'\0',sizeof(attr[count].value));
         if (attr[count].attr_name == NULL || attr[count].value == NULL) {
             // Memory allocation failed, free previously allocated memory
             for (int j = 0; j < count; j++) {
@@ -660,6 +666,7 @@ int zcs_get_attribs(char *name, zcs_attribute_t attr[], int *num){
 
     // Update the number of actual attributes read
     *num = count;
+    //printf("%s\n",attr[0].attr_name);
     return 0;
 }
 
