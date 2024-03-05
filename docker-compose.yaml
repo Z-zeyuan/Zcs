@@ -19,6 +19,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: app
-    command: ["./apptest"]
+    container_name: app1
+    command: ["./apptest1"]
+    # Add other configurations like ports, volumes, etc. if needed
+  app2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: app2
+    command: ["./apptest2"]
     # Add other configurations like ports, volumes, etc. if needed
