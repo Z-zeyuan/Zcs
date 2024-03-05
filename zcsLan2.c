@@ -17,6 +17,11 @@
 
 #define APP_SEND_PORT   4096
 #define SERVICE_SEND_PORT 5024
+
+
+#define RELAY_TOAPP_PORT   6000
+#define RELAY_TOSERVICE_PORT 7000
+
 #define DEFAULT_PORT 4004
 
 #define TIMEOUT 1
@@ -60,6 +65,8 @@ typedef struct {
 
 char *ip1A = "224.1.1.1";
 char *ip1S = "224.1.1.2";
+char *Relay_ip = "224.1.10.10";
+
 char *discovery = "D";
 
 int isInit = 0;
@@ -69,6 +76,9 @@ mcast_t *App_Service_Send;
 mcast_t *App_Service_Receive;
 mcast_t *Service_App_Send;
 mcast_t *Service_App_Receive;
+
+mcast_t *Send_to_Relay;
+
 
 NodeList LR;    // Local Registry
 CBDict cbd;     // CallBack function table
@@ -423,6 +433,7 @@ void ProcessAdvertisementMSG(char *msg){
 void send_msg(mcast_t *channel, void *msg, int msglen, int wave){
     for (int i = 0; i < wave; i++){
         int err = multicast_send(channel,msg,msglen);
+        err = multicast_send(Send_to_Relay,msg,msglen);
         //printf("Message Send: %d\n",err);
         usleep(10000);
     }
@@ -536,6 +547,7 @@ int zcs_init(int type){
         // Initialize multicast channels
         App_Service_Send = multicast_init(ip1A,APP_SEND_PORT,DEFAULT_PORT);
         App_Service_Receive = multicast_init(ip1S,DEFAULT_PORT,SERVICE_SEND_PORT);
+        Send_to_Relay = multicast_init(Relay_ip,RELAY_TOSERVICE_PORT,DEFAULT_PORT);
         // Create Listener thread
         pthread_create(&ListenerThread,NULL,AppListener,NULL);
         // Send Discovery Msg
@@ -545,6 +557,8 @@ int zcs_init(int type){
         // Initialize multicast channels for Service
         Service_App_Send = multicast_init(ip1S,SERVICE_SEND_PORT,DEFAULT_PORT);
         Service_App_Receive = multicast_init(ip1A,DEFAULT_PORT,APP_SEND_PORT);
+        Send_to_Relay = multicast_init(Relay_ip,RELAY_TOAPP_PORT,DEFAULT_PORT);
+
         isInit = 1;
     }
 

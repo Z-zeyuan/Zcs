@@ -10,10 +10,11 @@ void hello(char *s, char *r) {
 
 int main() {
     int rv;
+    sleep(20);
     rv = zcs_init(ZCS_APP_TYPE);
     char *names[10];
     printf("yutvfgubyh76ftrcdxgfvyubh867frctdgfbuy6g7t\n");
-    sleep(5);
+    
     rv = zcs_query("type", "speaker", names, 10);
     sleep(5);
     //printf("%d\n",rv);

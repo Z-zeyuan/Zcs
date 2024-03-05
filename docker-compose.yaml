@@ -29,3 +29,10 @@ services:
     container_name: app2
     command: ["./apptest2"]
     # Add other configurations like ports, volumes, etc. if needed
+  relay:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: relay
+    command: ["./relay"]
+    # Add other configurations like ports, volumes, etc. if needed
